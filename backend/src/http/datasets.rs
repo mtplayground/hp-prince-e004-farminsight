@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     csv_parser::{parse_csv_preview, CsvParseError, CsvPreview},
     models::dataset::StoredFileReference,
-    profiling::{profile_columns, ColumnProfile},
+    profiling::{column_stats_payload, detected_schema_payload, profile_columns, ColumnProfile},
     storage::StorageError,
 };
 
@@ -44,6 +44,8 @@ struct DatasetResponse {
     row_count: Option<i64>,
     column_count: Option<i32>,
     column_names: Vec<String>,
+    detected_schema: Value,
+    column_stats: Value,
     stats: Value,
     uploaded_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
@@ -133,6 +135,8 @@ pub(super) async fn upload(
     let byte_size = i64::try_from(csv.bytes.len()).map_err(|_| UploadError::UploadTooLarge)?;
     let parsed = parse_csv_preview(&csv.bytes, 200)?;
     let profiles = profile_columns(&parsed);
+    let detected_schema = detected_schema_payload(&profiles);
+    let column_stats = column_stats_payload(&profiles);
     let row_count = i64::try_from(parsed.row_count).ok();
     let column_count = i32::try_from(parsed.column_count).ok();
     let column_names = parsed.columns.clone();
@@ -140,7 +144,7 @@ pub(super) async fn upload(
         "source": "upload",
         "raw_csv": true,
         "parser": "forgiving",
-        "column_profiles": profiles
+        "schema_persisted": true
     });
 
     storage
@@ -161,6 +165,8 @@ pub(super) async fn upload(
             row_count,
             column_count,
             column_names: column_names.clone(),
+            detected_schema: detected_schema.clone(),
+            column_stats: column_stats.clone(),
             stats: stats.clone(),
         },
     )
@@ -183,6 +189,8 @@ pub(super) async fn upload(
                 row_count,
                 column_count,
                 column_names,
+                detected_schema,
+                column_stats,
                 stats,
                 uploaded_at: timestamps.uploaded_at,
                 created_at: timestamps.created_at,
@@ -306,6 +314,8 @@ struct InsertDataset {
     row_count: Option<i64>,
     column_count: Option<i32>,
     column_names: Vec<String>,
+    detected_schema: Value,
+    column_stats: Value,
     stats: Value,
 }
 
@@ -334,9 +344,11 @@ async fn insert_dataset(
                 row_count,
                 column_count,
                 column_names,
+                detected_schema,
+                column_stats,
                 stats
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             RETURNING uploaded_at, created_at, updated_at
             "#,
         )
@@ -351,6 +363,8 @@ async fn insert_dataset(
         .bind(dataset.row_count)
         .bind(dataset.column_count)
         .bind(SqlJson(dataset.column_names))
+        .bind(SqlJson(dataset.detected_schema))
+        .bind(SqlJson(dataset.column_stats))
         .bind(SqlJson(dataset.stats))
         .fetch_one(&state.db)
         .await?;

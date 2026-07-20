@@ -15,6 +15,8 @@ pub struct Dataset {
     pub row_count: Option<i64>,
     pub column_count: Option<i32>,
     pub column_names: Vec<String>,
+    pub detected_schema: Value,
+    pub column_stats: Value,
     pub stats: Value,
     pub uploaded_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -38,6 +40,8 @@ pub struct NewDataset {
     pub row_count: Option<i64>,
     pub column_count: Option<i32>,
     pub column_names: Vec<String>,
+    pub detected_schema: Value,
+    pub column_stats: Value,
     pub stats: Value,
 }
 

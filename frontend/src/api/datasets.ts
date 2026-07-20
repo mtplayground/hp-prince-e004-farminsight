@@ -24,6 +24,8 @@ export type DatasetRecord = {
   row_count: number | null;
   column_count: number | null;
   column_names: string[];
+  detected_schema: Record<string, unknown>;
+  column_stats: unknown[];
   stats: Record<string, unknown>;
   uploaded_at: string;
   created_at: string;
