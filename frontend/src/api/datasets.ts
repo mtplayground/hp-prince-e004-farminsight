@@ -40,6 +40,20 @@ type UploadResponse = {
   dataset: DatasetRecord;
 };
 
+export type DatasetSchemaResponse = {
+  dataset_id: string;
+  owner_sub: string;
+  team_id: string | null;
+  original_filename: string;
+  row_count: number | null;
+  column_count: number | null;
+  column_names: string[];
+  detected_schema: Record<string, unknown>;
+  column_stats: unknown[];
+  stats: Record<string, unknown>;
+  uploaded_at: string;
+};
+
 export async function previewDatasetFile(file: File, signal?: AbortSignal) {
   const response = await fetch('/api/datasets/preview', {
     method: 'POST',
@@ -70,6 +84,19 @@ export async function uploadDatasetFile(file: File, signal?: AbortSignal) {
 
   const body = (await response.json()) as UploadResponse;
   return body.dataset;
+}
+
+export async function fetchDatasetSchema(datasetId: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/datasets/${encodeURIComponent(datasetId)}/schema`, {
+    credentials: 'include',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await datasetErrorMessage(response, 'Dataset schema fetch failed'));
+  }
+
+  return (await response.json()) as DatasetSchemaResponse;
 }
 
 function datasetForm(file: File) {

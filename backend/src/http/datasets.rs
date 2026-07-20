@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Multipart, State},
+    extract::{Multipart, Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Extension, Json,
@@ -32,6 +32,21 @@ pub(super) struct UploadResponse {
 pub(super) struct PreviewResponse {
     preview: CsvPreview,
     profiles: Vec<ColumnProfile>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct SchemaResponse {
+    dataset_id: Uuid,
+    owner_sub: String,
+    team_id: Option<Uuid>,
+    original_filename: String,
+    row_count: Option<i64>,
+    column_count: Option<i32>,
+    column_names: Vec<String>,
+    detected_schema: Value,
+    column_stats: Value,
+    stats: Value,
+    uploaded_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -78,6 +93,8 @@ pub enum UploadError {
     TeamNotFound,
     #[error("current user is not a member of the requested team")]
     ForbiddenTeam,
+    #[error("dataset not found")]
+    DatasetNotFound,
     #[error(transparent)]
     CsvParse(#[from] CsvParseError),
     #[error(transparent)]
@@ -103,6 +120,18 @@ pub(super) async fn preview(
     let profiles = profile_columns(&preview);
 
     Ok(Json(PreviewResponse { preview, profiles }))
+}
+
+pub(super) async fn schema(
+    State(state): State<AppState>,
+    Extension(context): Extension<CurrentAuthContext>,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<SchemaResponse>, UploadError> {
+    let schema = fetch_dataset_schema(&state, dataset_id, context.user.identity.sub.as_str())
+        .await?
+        .ok_or(UploadError::DatasetNotFound)?;
+
+    Ok(Json(schema))
 }
 
 pub(super) async fn upload(
@@ -325,6 +354,88 @@ struct DatasetTimestamps {
     updated_at: DateTime<Utc>,
 }
 
+async fn fetch_dataset_schema(
+    state: &AppState,
+    dataset_id: Uuid,
+    user_sub: &str,
+) -> Result<Option<SchemaResponse>, UploadError> {
+    let schema = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            Option<Uuid>,
+            String,
+            Option<i64>,
+            Option<i32>,
+            SqlJson<Vec<String>>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            DateTime<Utc>,
+        ),
+    >(
+        r#"
+        SELECT
+            d.id,
+            d.owner_sub,
+            d.team_id,
+            d.original_filename,
+            d.row_count,
+            d.column_count,
+            d.column_names,
+            d.detected_schema,
+            d.column_stats,
+            d.stats,
+            d.uploaded_at
+        FROM datasets d
+        WHERE d.id = $1
+          AND (
+            d.owner_sub = $2
+            OR EXISTS (
+              SELECT 1
+              FROM team_memberships tm
+              WHERE tm.team_id = d.team_id
+                AND tm.user_sub = $2
+            )
+          )
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(user_sub)
+    .fetch_optional(&state.db)
+    .await?
+    .map(
+        |(
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            row_count,
+            column_count,
+            SqlJson(column_names),
+            SqlJson(detected_schema),
+            SqlJson(column_stats),
+            SqlJson(stats),
+            uploaded_at,
+        )| SchemaResponse {
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            row_count,
+            column_count,
+            column_names,
+            detected_schema,
+            column_stats,
+            stats,
+            uploaded_at,
+        },
+    );
+
+    Ok(schema)
+}
+
 async fn insert_dataset(
     state: &AppState,
     dataset: InsertDataset,
@@ -418,6 +529,13 @@ impl IntoResponse for UploadError {
                 StatusCode::FORBIDDEN,
                 Json(ErrorResponse {
                     error: "team_forbidden",
+                }),
+            )
+                .into_response(),
+            Self::DatasetNotFound => (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "dataset_not_found",
                 }),
             )
                 .into_response(),
