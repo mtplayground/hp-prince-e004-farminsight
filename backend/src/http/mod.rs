@@ -1,9 +1,13 @@
 use std::path::PathBuf;
 
 mod auth;
+pub mod middleware;
 
 use crate::{auth::AuthService, config::Settings};
-use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
+use axum::{
+    extract::State, http::StatusCode, middleware as axum_middleware, response::IntoResponse,
+    routing::get, Json, Router,
+};
 use serde::Serialize;
 use sqlx::PgPool;
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -27,19 +31,28 @@ pub fn router(frontend_dist_dir: PathBuf, db: PgPool, settings: &Settings) -> Ro
     let spa_service = ServeDir::new(&frontend_dist_dir)
         .fallback(tower_http::services::ServeFile::new(frontend_dist_dir.join("index.html")));
     let auth = AuthService::from_settings(db.clone(), settings).ok();
+    let state = AppState {
+        db,
+        auth,
+        self_url: settings.self_url.clone(),
+    };
+
+    let protected_api = Router::new()
+        .route("/api/auth/session", get(auth::session))
+        .route("/api/auth/context", get(auth::context))
+        .route_layer(axum_middleware::from_fn_with_state(
+            state.clone(),
+            middleware::require_auth,
+        ));
 
     Router::new()
         .route("/api/health", get(health))
         .route("/api/auth/login", get(auth::login))
         .route("/api/auth/register", get(auth::register))
-        .route("/api/auth/session", get(auth::session))
+        .merge(protected_api)
         .fallback_service(spa_service)
         .layer(TraceLayer::new_for_http())
-        .with_state(AppState {
-            db,
-            auth,
-            self_url: settings.self_url.clone(),
-        })
+        .with_state(state)
 }
 
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
