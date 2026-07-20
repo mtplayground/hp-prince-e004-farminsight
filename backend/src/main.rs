@@ -1,6 +1,7 @@
 mod config;
 mod db;
 mod http;
+mod models;
 
 use anyhow::Context;
 use config::Settings;
