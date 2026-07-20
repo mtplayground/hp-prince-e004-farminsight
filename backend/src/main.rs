@@ -4,6 +4,7 @@ mod db;
 mod email;
 mod http;
 mod models;
+mod storage;
 
 use anyhow::Context;
 use config::Settings;
