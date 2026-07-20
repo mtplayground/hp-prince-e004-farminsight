@@ -87,6 +87,14 @@ impl AuthService {
         session_token_from_cookie_header(cookie_header)
     }
 
+    pub fn auth_url(&self) -> &str {
+        self.settings.auth_url.as_str()
+    }
+
+    pub fn app_token(&self) -> &str {
+        self.settings.app_token.as_str()
+    }
+
     pub async fn verify_session_cookie(
         &self,
         cookie_header: &str,

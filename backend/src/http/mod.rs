@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+mod auth;
+
+use crate::{auth::AuthService, config::Settings};
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::get, Json, Router};
 use serde::Serialize;
 use sqlx::PgPool;
@@ -8,6 +11,8 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 #[derive(Clone)]
 pub struct AppState {
     db: PgPool,
+    auth: Option<AuthService>,
+    self_url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -18,15 +23,23 @@ struct HealthResponse {
     database: &'static str,
 }
 
-pub fn router(frontend_dist_dir: PathBuf, db: PgPool) -> Router {
+pub fn router(frontend_dist_dir: PathBuf, db: PgPool, settings: &Settings) -> Router {
     let spa_service = ServeDir::new(&frontend_dist_dir)
         .fallback(tower_http::services::ServeFile::new(frontend_dist_dir.join("index.html")));
+    let auth = AuthService::from_settings(db.clone(), settings).ok();
 
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/auth/login", get(auth::login))
+        .route("/api/auth/register", get(auth::register))
+        .route("/api/auth/session", get(auth::session))
         .fallback_service(spa_service)
         .layer(TraceLayer::new_for_http())
-        .with_state(AppState { db })
+        .with_state(AppState {
+            db,
+            auth,
+            self_url: settings.self_url.clone(),
+        })
 }
 
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
