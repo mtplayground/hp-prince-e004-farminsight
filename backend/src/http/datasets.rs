@@ -47,6 +47,8 @@ pub(super) struct SchemaResponse {
     column_names: Vec<String>,
     detected_schema: Value,
     column_stats: Value,
+    cached_insights: Value,
+    cached_chart_specs: Value,
     stats: Value,
     uploaded_at: DateTime<Utc>,
 }
@@ -63,6 +65,8 @@ struct DatasetResponse {
     column_names: Vec<String>,
     detected_schema: Value,
     column_stats: Value,
+    cached_insights: Value,
+    cached_chart_specs: Value,
     stats: Value,
     uploaded_at: DateTime<Utc>,
     created_at: DateTime<Utc>,
@@ -170,6 +174,8 @@ pub(super) async fn upload(
     let column_stats = column_stats_payload(&profiles);
     let insights = generate_insights(&parsed, &profiles);
     let chart_specs = select_chart_specs(&parsed, &profiles);
+    let cached_insights = json!(insights);
+    let cached_chart_specs = json!(chart_specs);
     let row_count = i64::try_from(parsed.row_count).ok();
     let column_count = i32::try_from(parsed.column_count).ok();
     let column_names = parsed.columns.clone();
@@ -178,8 +184,8 @@ pub(super) async fn upload(
         "raw_csv": true,
         "parser": "forgiving",
         "schema_persisted": true,
-        "plain_language_insights": insights,
-        "chart_specs": chart_specs
+        "insights_cached": true,
+        "chart_specs_cached": true
     });
 
     storage
@@ -202,6 +208,8 @@ pub(super) async fn upload(
             column_names: column_names.clone(),
             detected_schema: detected_schema.clone(),
             column_stats: column_stats.clone(),
+            cached_insights: cached_insights.clone(),
+            cached_chart_specs: cached_chart_specs.clone(),
             stats: stats.clone(),
         },
     )
@@ -226,6 +234,8 @@ pub(super) async fn upload(
                 column_names,
                 detected_schema,
                 column_stats,
+                cached_insights,
+                cached_chart_specs,
                 stats,
                 uploaded_at: timestamps.uploaded_at,
                 created_at: timestamps.created_at,
@@ -351,6 +361,8 @@ struct InsertDataset {
     column_names: Vec<String>,
     detected_schema: Value,
     column_stats: Value,
+    cached_insights: Value,
+    cached_chart_specs: Value,
     stats: Value,
 }
 
@@ -378,6 +390,8 @@ async fn fetch_dataset_schema(
             SqlJson<Value>,
             SqlJson<Value>,
             SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
             DateTime<Utc>,
         ),
     >(
@@ -392,6 +406,8 @@ async fn fetch_dataset_schema(
             d.column_names,
             d.detected_schema,
             d.column_stats,
+            d.cached_insights,
+            d.cached_chart_specs,
             d.stats,
             d.uploaded_at
         FROM datasets d
@@ -422,6 +438,8 @@ async fn fetch_dataset_schema(
             SqlJson(column_names),
             SqlJson(detected_schema),
             SqlJson(column_stats),
+            SqlJson(cached_insights),
+            SqlJson(cached_chart_specs),
             SqlJson(stats),
             uploaded_at,
         )| SchemaResponse {
@@ -434,6 +452,8 @@ async fn fetch_dataset_schema(
             column_names,
             detected_schema,
             column_stats,
+            cached_insights,
+            cached_chart_specs,
             stats,
             uploaded_at,
         },
@@ -463,9 +483,11 @@ async fn insert_dataset(
                 column_names,
                 detected_schema,
                 column_stats,
+                cached_insights,
+                cached_chart_specs,
                 stats
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
             RETURNING uploaded_at, created_at, updated_at
             "#,
         )
@@ -482,6 +504,8 @@ async fn insert_dataset(
         .bind(SqlJson(dataset.column_names))
         .bind(SqlJson(dataset.detected_schema))
         .bind(SqlJson(dataset.column_stats))
+        .bind(SqlJson(dataset.cached_insights))
+        .bind(SqlJson(dataset.cached_chart_specs))
         .bind(SqlJson(dataset.stats))
         .fetch_one(&state.db)
         .await?;
