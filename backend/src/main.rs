@@ -4,6 +4,7 @@ mod csv_parser;
 mod db;
 mod email;
 mod http;
+mod insights;
 mod models;
 mod profiling;
 mod storage;
