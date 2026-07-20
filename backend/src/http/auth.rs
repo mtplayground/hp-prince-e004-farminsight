@@ -1,17 +1,15 @@
 use axum::{
     extract::{Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
+    Extension,
     Json,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    auth::{AuthError, AuthenticatedUser},
-    models::user::UserIdentity,
-};
+use crate::auth::AuthError;
 
-use super::AppState;
+use super::{middleware::CurrentAuthContext, AppState};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct AuthRedirectQuery {
@@ -20,9 +18,15 @@ pub(super) struct AuthRedirectQuery {
 
 #[derive(Debug, Serialize)]
 pub(super) struct SessionResponse {
-    user: UserIdentity,
+    user: crate::models::user::UserIdentity,
     is_first_seen: bool,
     message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct AuthContextResponse {
+    session: SessionResponse,
+    team: super::middleware::CurrentTeamContext,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,18 +61,18 @@ pub(super) async fn register(
 }
 
 pub(super) async fn session(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<SessionResponse>, AuthHttpError> {
-    let auth = state.auth.as_ref().ok_or(AuthHttpError::AuthNotConfigured)?;
-    let cookie_header = headers
-        .get(header::COOKIE)
-        .and_then(|value| value.to_str().ok())
-        .ok_or(AuthError::MissingSessionCookie)?;
-    let claims = auth.verify_session_cookie(cookie_header).await?;
-    let user = auth.upsert_user_from_claims(&claims).await?;
+    Extension(context): Extension<CurrentAuthContext>,
+) -> Json<SessionResponse> {
+    Json(session_response(context))
+}
 
-    Ok(Json(session_response(user)))
+pub(super) async fn context(
+    Extension(context): Extension<CurrentAuthContext>,
+) -> Json<AuthContextResponse> {
+    Json(AuthContextResponse {
+        session: session_response(context.clone()),
+        team: context.team,
+    })
 }
 
 fn redirect_to_auth(
@@ -90,19 +94,19 @@ fn redirect_to_auth(
     Ok(Redirect::to(login_url.as_str()))
 }
 
-fn session_response(user: AuthenticatedUser) -> SessionResponse {
-    let message = if user.is_first_seen {
+fn session_response(context: CurrentAuthContext) -> SessionResponse {
+    let message = if context.user.is_first_seen {
         "Registration complete".to_owned()
     } else {
-        match user.identity.name.as_deref() {
+        match context.user.identity.name.as_deref() {
             Some(name) => format!("Welcome back, {name}"),
             None => "Welcome back".to_owned(),
         }
     };
 
     SessionResponse {
-        user: user.identity,
-        is_first_seen: user.is_first_seen,
+        user: context.user.identity,
+        is_first_seen: context.user.is_first_seen,
         message,
     }
 }
