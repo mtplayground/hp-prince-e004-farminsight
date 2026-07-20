@@ -5,6 +5,7 @@ mod db;
 mod email;
 mod http;
 mod models;
+mod profiling;
 mod storage;
 
 use anyhow::Context;
