@@ -11,8 +11,9 @@ use sqlx::types::Json as SqlJson;
 use uuid::Uuid;
 
 use crate::{
-    csv_parser::{parse_csv_metadata, parse_csv_preview, CsvParseError, CsvPreview},
+    csv_parser::{parse_csv_preview, CsvParseError, CsvPreview},
     models::dataset::StoredFileReference,
+    profiling::{profile_columns, ColumnProfile},
     storage::StorageError,
 };
 
@@ -30,6 +31,7 @@ pub(super) struct UploadResponse {
 #[derive(Debug, Serialize)]
 pub(super) struct PreviewResponse {
     preview: CsvPreview,
+    profiles: Vec<ColumnProfile>,
 }
 
 #[derive(Debug, Serialize)]
@@ -96,8 +98,9 @@ pub(super) async fn preview(
     validate_csv_upload(&csv)?;
 
     let preview = parse_csv_preview(&csv.bytes, 25)?;
+    let profiles = profile_columns(&preview);
 
-    Ok(Json(PreviewResponse { preview }))
+    Ok(Json(PreviewResponse { preview, profiles }))
 }
 
 pub(super) async fn upload(
@@ -128,11 +131,16 @@ pub(super) async fn upload(
         csv.filename.as_str(),
     );
     let byte_size = i64::try_from(csv.bytes.len()).map_err(|_| UploadError::UploadTooLarge)?;
-    let (row_count, column_count, column_names) = parse_csv_metadata(&csv.bytes)?;
+    let parsed = parse_csv_preview(&csv.bytes, 200)?;
+    let profiles = profile_columns(&parsed);
+    let row_count = i64::try_from(parsed.row_count).ok();
+    let column_count = i32::try_from(parsed.column_count).ok();
+    let column_names = parsed.columns.clone();
     let stats = json!({
         "source": "upload",
         "raw_csv": true,
-        "parser": "forgiving"
+        "parser": "forgiving",
+        "column_profiles": profiles
     });
 
     storage

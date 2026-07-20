@@ -55,16 +55,6 @@ pub fn parse_csv_preview(
     build_preview(records, delimiter, max_preview_rows, warnings)
 }
 
-pub fn parse_csv_metadata(
-    bytes: &[u8],
-) -> Result<(Option<i64>, Option<i32>, Vec<String>), CsvParseError> {
-    let preview = parse_csv_preview(bytes, 0)?;
-    let row_count = i64::try_from(preview.row_count).ok();
-    let column_count = i32::try_from(preview.column_count).ok();
-
-    Ok((row_count, column_count, preview.columns))
-}
-
 fn parse_lossy_lines(
     bytes: &[u8],
     delimiter: u8,
@@ -274,8 +264,8 @@ mod tests {
 
     #[test]
     fn detects_semicolon_delimiter() {
-        let preview =
-            parse_csv_preview("field;yield\nwest;42\n".as_bytes(), 5).expect("preview should parse");
+        let preview = parse_csv_preview("field;yield\nwest;42\n".as_bytes(), 5)
+            .expect("preview should parse");
 
         assert_eq!(preview.delimiter, ';');
         assert_eq!(preview.columns, vec!["field", "yield"]);
