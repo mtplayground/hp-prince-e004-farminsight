@@ -12,6 +12,8 @@ import {
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 
+import { useAuth } from '../auth/useAuth';
+
 type HealthState =
   | { status: 'checking' }
   | { status: 'ready'; service: string; version: string; database: string }
@@ -41,6 +43,7 @@ const routeTitles: Record<string, string> = {
 
 export function AppShell() {
   const health = useApiHealth();
+  const auth = useAuth();
   const location = useLocation();
   const routeTitle = routeTitles[location.pathname] ?? 'Workspace';
 
@@ -55,7 +58,7 @@ export function AppShell() {
             <h1 className="text-lg font-semibold">Farminsight</h1>
           </div>
           <div className="flex items-center gap-2">
-            <AuthLinks compact />
+            <AccountControl compact />
             <StatusPill health={health} compact />
           </div>
         </div>
@@ -115,7 +118,15 @@ export function AppShell() {
             </nav>
 
             <div className="border-t border-stone-200 px-3 py-4">
-              <AuthLinks />
+              {auth.status === 'authenticated' ? (
+                <UserSummary
+                  name={auth.context.session.user.name}
+                  email={auth.context.session.user.email}
+                  pictureUrl={auth.context.session.user.picture_url}
+                />
+              ) : (
+                <AuthLinks />
+              )}
             </div>
 
             <div className="mt-auto border-t border-stone-200 p-4">
@@ -142,6 +153,23 @@ export function AppShell() {
       </div>
     </div>
   );
+}
+
+function AccountControl({ compact = false }: { compact?: boolean }) {
+  const auth = useAuth();
+
+  if (auth.status === 'authenticated') {
+    return (
+      <UserAvatar
+        name={auth.context.session.user.name}
+        email={auth.context.session.user.email}
+        pictureUrl={auth.context.session.user.picture_url}
+        compact={compact}
+      />
+    );
+  }
+
+  return <AuthLinks compact={compact} />;
 }
 
 function AuthLinks({ compact = false }: { compact?: boolean }) {
@@ -191,6 +219,61 @@ function AuthLinks({ compact = false }: { compact?: boolean }) {
         Register
       </NavLink>
     </div>
+  );
+}
+
+function UserSummary({
+  name,
+  email,
+  pictureUrl,
+}: {
+  name: string | null;
+  email: string;
+  pictureUrl: string | null;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-stone-200 bg-stone-50 p-3">
+      <UserAvatar name={name} email={email} pictureUrl={pictureUrl} />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">{name || email}</p>
+        <p className="truncate text-xs text-stone-600">{email}</p>
+      </div>
+    </div>
+  );
+}
+
+function UserAvatar({
+  name,
+  email,
+  pictureUrl,
+  compact = false,
+}: {
+  name: string | null;
+  email: string;
+  pictureUrl: string | null;
+  compact?: boolean;
+}) {
+  const label = name || email;
+  const initial = label.trim().charAt(0).toUpperCase() || '?';
+  const size = compact ? 'h-9 w-9' : 'h-10 w-10';
+
+  if (pictureUrl) {
+    return (
+      <img
+        src={pictureUrl}
+        alt=""
+        className={`${size} shrink-0 rounded-md border border-stone-200 object-cover`}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`${size} inline-flex shrink-0 items-center justify-center rounded-md bg-field text-sm font-semibold text-white`}
+      aria-label={label}
+    >
+      {initial}
+    </span>
   );
 }
 
