@@ -17,6 +17,8 @@ pub struct Dataset {
     pub column_names: Vec<String>,
     pub detected_schema: Value,
     pub column_stats: Value,
+    pub cached_insights: Value,
+    pub cached_chart_specs: Value,
     pub stats: Value,
     pub uploaded_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
@@ -42,6 +44,8 @@ pub struct NewDataset {
     pub column_names: Vec<String>,
     pub detected_schema: Value,
     pub column_stats: Value,
+    pub cached_insights: Value,
+    pub cached_chart_specs: Value,
     pub stats: Value,
 }
 

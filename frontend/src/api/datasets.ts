@@ -26,6 +26,8 @@ export type DatasetRecord = {
   column_names: string[];
   detected_schema: Record<string, unknown>;
   column_stats: unknown[];
+  cached_insights: unknown[];
+  cached_chart_specs: unknown[];
   stats: Record<string, unknown>;
   uploaded_at: string;
   created_at: string;
@@ -50,6 +52,8 @@ export type DatasetSchemaResponse = {
   column_names: string[];
   detected_schema: Record<string, unknown>;
   column_stats: unknown[];
+  cached_insights: unknown[];
+  cached_chart_specs: unknown[];
   stats: Record<string, unknown>;
   uploaded_at: string;
 };
