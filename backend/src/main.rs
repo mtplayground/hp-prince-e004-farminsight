@@ -1,4 +1,5 @@
 mod auth;
+mod charts;
 mod config;
 mod csv_parser;
 mod db;
