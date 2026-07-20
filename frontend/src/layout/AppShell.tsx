@@ -4,7 +4,9 @@ import {
   ChevronRight,
   CircleGauge,
   Database,
+  LogIn,
   PanelLeft,
+  UserPlus,
   Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -33,6 +35,8 @@ const navItems = [
 const routeTitles: Record<string, string> = {
   '/insights': 'Insights',
   '/team': 'Team',
+  '/login': 'Sign in',
+  '/register': 'Create account',
 };
 
 export function AppShell() {
@@ -50,7 +54,10 @@ export function AppShell() {
             </p>
             <h1 className="text-lg font-semibold">Farminsight</h1>
           </div>
-          <StatusPill health={health} compact />
+          <div className="flex items-center gap-2">
+            <AuthLinks compact />
+            <StatusPill health={health} compact />
+          </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto border-t border-stone-100 px-3 py-2 lg:hidden">
           {navItems.map(({ label, to, icon: Icon }) => (
@@ -107,6 +114,10 @@ export function AppShell() {
               ))}
             </nav>
 
+            <div className="border-t border-stone-200 px-3 py-4">
+              <AuthLinks />
+            </div>
+
             <div className="mt-auto border-t border-stone-200 p-4">
               <RuntimePanel health={health} />
             </div>
@@ -129,6 +140,56 @@ export function AppShell() {
           </div>
         </main>
       </div>
+    </div>
+  );
+}
+
+function AuthLinks({ compact = false }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <NavLink
+        to="/login"
+        className={({ isActive }) =>
+          [
+            'inline-flex min-h-9 items-center justify-center rounded-md px-2.5 text-sm font-semibold',
+            isActive ? 'bg-field text-white' : 'text-stone-700 hover:bg-stone-100 hover:text-ink',
+          ].join(' ')
+        }
+        aria-label="Sign in"
+      >
+        <LogIn className="h-4 w-4" aria-hidden="true" />
+      </NavLink>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <NavLink
+        to="/login"
+        className={({ isActive }) =>
+          [
+            'inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold',
+            isActive
+              ? 'bg-field text-white'
+              : 'border border-stone-200 text-stone-700 hover:bg-stone-100 hover:text-ink',
+          ].join(' ')
+        }
+      >
+        <LogIn className="h-4 w-4" aria-hidden="true" />
+        Sign in
+      </NavLink>
+      <NavLink
+        to="/register"
+        className={({ isActive }) =>
+          [
+            'inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold',
+            isActive ? 'bg-field text-white' : 'bg-stone-900 text-white hover:bg-stone-700',
+          ].join(' ')
+        }
+      >
+        <UserPlus className="h-4 w-4" aria-hidden="true" />
+        Register
+      </NavLink>
     </div>
   );
 }
