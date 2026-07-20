@@ -6,6 +6,7 @@ frontend/vite.config.d.ts
 frontend/vite.config.js
 .env
 .env.*
+!.env.example
 .gh_token
 .database_url
 .task_id

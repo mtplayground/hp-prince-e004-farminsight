@@ -35,3 +35,5 @@ cargo run -p farminsight-backend
 ```
 
 Runtime settings are read from environment variables. `DATABASE_URL` is required and must point to PostgreSQL. `HOST` defaults to `0.0.0.0`, `PORT` defaults to `8080`, `FRONTEND_DIST_DIR` defaults to `frontend/dist`, and `DATABASE_MAX_CONNECTIONS` defaults to `5`. Set `DATABASE_SSL_MODE` to `disable`, `prefer`, or `require` only when overriding the connection string's own SSL mode.
+
+See `.env.example` for the complete backend environment contract, including PostgreSQL, object storage, auth service, legacy JWT fallback, and email proxy settings. The backend loads `.env` for local development when present.
