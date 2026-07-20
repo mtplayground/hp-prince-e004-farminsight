@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
     let db = db::connect(&settings).await?;
     db::migrate(&db).await?;
 
-    let app = http::router(settings.frontend_dist_dir.clone(), db);
+    let app = http::router(settings.frontend_dist_dir.clone(), db, &settings);
     let bind_addr = settings.bind_addr();
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
