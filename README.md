@@ -30,7 +30,8 @@ npm run build
 Run the backend host on `0.0.0.0:8080` after building the SPA:
 
 ```bash
+export DATABASE_URL=$(cat /workspace/.database_url)
 cargo run -p farminsight-backend
 ```
 
-Runtime settings are read from environment variables. `HOST` defaults to `0.0.0.0`, `PORT` defaults to `8080`, and `FRONTEND_DIST_DIR` defaults to `frontend/dist`.
+Runtime settings are read from environment variables. `DATABASE_URL` is required and must point to PostgreSQL. `HOST` defaults to `0.0.0.0`, `PORT` defaults to `8080`, `FRONTEND_DIST_DIR` defaults to `frontend/dist`, and `DATABASE_MAX_CONNECTIONS` defaults to `5`. Set `DATABASE_SSL_MODE` to `disable`, `prefer`, or `require` only when overriding the connection string's own SSL mode.
