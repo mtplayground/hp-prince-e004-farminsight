@@ -1,4 +1,5 @@
 mod config;
+mod db;
 mod http;
 
 use anyhow::Context;
@@ -15,7 +16,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let settings = Settings::from_env()?;
-    let app = http::router(settings.frontend_dist_dir.clone());
+    let db = db::connect(&settings).await?;
+    db::migrate(&db).await?;
+
+    let app = http::router(settings.frontend_dist_dir.clone(), db);
     let bind_addr = settings.bind_addr();
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
