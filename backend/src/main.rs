@@ -1,5 +1,6 @@
 mod auth;
 mod config;
+mod csv_parser;
 mod db;
 mod email;
 mod http;
