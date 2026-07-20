@@ -1,0 +1,12 @@
+node_modules
+target
+frontend/dist
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+.env
+.env.*
+.gh_token
+.database_url
+.progress
+.pipeline-state.json

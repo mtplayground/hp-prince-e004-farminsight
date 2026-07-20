@@ -7,6 +7,19 @@
   "scripts": {
     "build": "npm run build --workspace frontend",
     "dev": "npm run dev --workspace frontend",
-    "preview": "npm run preview --workspace frontend"
+    "preview": "npm run preview --workspace frontend",
+    "lint": "npm run lint --workspace frontend",
+    "format": "prettier --write . && cargo fmt --all",
+    "format:check": "prettier --check . && cargo fmt --all --check",
+    "clippy": "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+  },
+  "devDependencies": {
+    "@eslint/js": "latest",
+    "eslint": "latest",
+    "eslint-plugin-react-hooks": "latest",
+    "eslint-plugin-react-refresh": "latest",
+    "globals": "latest",
+    "prettier": "latest",
+    "typescript-eslint": "latest"
   }
 }
