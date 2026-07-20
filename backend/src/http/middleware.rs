@@ -7,6 +7,7 @@ use axum::{
     Json,
 };
 use serde::Serialize;
+use uuid::Uuid;
 
 use crate::{auth::AuthError, models::user::UserIdentity};
 
@@ -28,7 +29,7 @@ pub struct CurrentUser {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CurrentTeamContext {
-    pub requested_team_id: Option<String>,
+    pub requested_team_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,7 +88,7 @@ async fn authenticate_request(
     })
 }
 
-fn requested_team_id(headers: &HeaderMap) -> Result<Option<String>, AuthMiddlewareError> {
+fn requested_team_id(headers: &HeaderMap) -> Result<Option<Uuid>, AuthMiddlewareError> {
     let Some(value) = headers.get(TEAM_CONTEXT_HEADER) else {
         return Ok(None);
     };
@@ -100,15 +101,9 @@ fn requested_team_id(headers: &HeaderMap) -> Result<Option<String>, AuthMiddlewa
         return Ok(None);
     }
 
-    let is_valid = team_id.len() <= 128
-        && team_id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
-    if !is_valid {
-        return Err(AuthMiddlewareError::InvalidTeamContext);
-    }
-
-    Ok(Some(team_id.to_owned()))
+    Uuid::parse_str(team_id)
+        .map(Some)
+        .map_err(|_| AuthMiddlewareError::InvalidTeamContext)
 }
 
 impl IntoResponse for AuthMiddlewareError {
