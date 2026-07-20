@@ -1,5 +1,11 @@
 target/
 node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
+.env
+.env.*
 .gh_token
 .database_url
 .task_id
