@@ -1,0 +1,53 @@
+# Architecture Plan
+
+## Product Scope
+
+The application is Farminsight, a team-based CSV analytics product for uploading messy agricultural datasets, detecting schema and column meaning, generating plain-language insights, and displaying adaptive chart galleries with drill-down exploration.
+
+## Repository Structure
+
+- `frontend/`: React SPA built with Vite and TypeScript.
+  - `src/app/`: app bootstrap, providers, router, protected routes.
+  - `src/layout/`: shell, navigation, page frames, empty/error/loading states.
+  - `src/features/auth/`: login, registration, auth context, API calls.
+  - `src/features/datasets/`: upload flow, CSV preview, schema view, insight summary, chart gallery, drill-down views.
+  - `src/features/team/`: team shared dataset tab, invitations, member management.
+  - `src/lib/`: API client, typed errors, storage helpers, formatting utilities.
+  - `src/types/`: shared frontend DTO types generated or mirrored from backend API contracts.
+- `backend/`: Rust Axum service.
+  - `src/main.rs`: configuration loading, tracing, router assembly, server startup.
+  - `src/config.rs`: environment parsing and strongly typed runtime settings.
+  - `src/http/`: route modules, extractors, response/error types, middleware.
+  - `src/auth/`: password hashing, JWT issuance/validation, current-user extraction.
+  - `src/db/`: SQLx pool setup, repositories, transaction helpers.
+  - `src/models/`: domain structs and API DTOs, serialized with serde.
+  - `src/services/`: CSV parsing, schema detection, stats, insights, chart-spec selection, object storage.
+  - `migrations/`: SQLx migrations for users, teams, memberships, invites, datasets, schemas, stats, cached insights, and chart specs.
+- `shared/`: optional OpenAPI schema or generated DTO artifacts if API contract generation is introduced.
+- Root files: workspace README, `.env.example`, lint/format configs, CI and deployment docs as added by later issues.
+
+## Issue Dependencies
+
+- #1-#4 establish the monorepo shape, lint/format tooling, database access, baseline migration, and environment contract.
+- #5 depends on #1-#2 and creates the frontend app frame for later pages.
+- #6-#9 depend on #3-#4 and provide user auth foundations used by all private APIs.
+- #10-#13 depend on auth and introduce team membership plus frontend protected routing.
+- #14-#17 depend on auth, teams, storage configuration, and database migrations to support dataset upload and preview.
+- #18-#20 depend on persisted datasets and parsed CSV previews to detect and expose schema/statistics.
+- #21-#24 depend on schema/statistics and introduce cached insight and chart-spec APIs.
+- #25-#27 depend on the insights API and schema API for user-facing summaries, charts, and drill-down.
+- #28-#30 depend on teams, memberships, datasets, and frontend app shell to expose shared access and member management.
+- #31-#32 depend on the core upload-to-insights path and harden it with end-to-end tests and messy CSV review.
+- #33 depends on the chosen app/server layout, environment contract, storage, database, and build commands.
+
+## Key Design Decisions
+
+- Keep the frontend and backend as separate packages to match the requested React SPA plus Rust/Axum architecture and allow independent build/lint/test commands.
+- Use PostgreSQL with SQLx migrations and compile-time checked query patterns where practical; repositories stay thin and service modules own business rules.
+- Use object storage for raw CSV files and PostgreSQL for metadata, detected schema, column stats, cached insights, and chart specs.
+- Make teams the primary authorization boundary for datasets; owners and members are represented through memberships with explicit roles.
+- Issue JWTs from the backend and enforce authorization through Axum middleware/extractors rather than duplicating checks in handlers.
+- Treat CSV ingestion as forgiving by default: preserve raw upload, generate preview/errors/warnings, and avoid rejecting files for recoverable row or type inconsistencies.
+- Cache insight summaries and chart specs by dataset and schema version so upload parsing and later visualization remain repeatable.
+- Define DTOs deliberately and keep them stable between frontend and backend; introduce OpenAPI or generated bindings only if duplication becomes risky.
+- Respect reverse-proxy deployment behavior by deriving public origin from forwarded headers or an injected allowed-origin environment variable when CORS or origin checks are added.
