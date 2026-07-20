@@ -57,6 +57,10 @@ pub fn router(frontend_dist_dir: PathBuf, db: PgPool, settings: &Settings) -> Ro
             post(datasets::upload).layer(DefaultBodyLimit::max(datasets::MAX_UPLOAD_BYTES)),
         )
         .route(
+            "/api/datasets/preview",
+            post(datasets::preview).layer(DefaultBodyLimit::max(datasets::MAX_UPLOAD_BYTES)),
+        )
+        .route(
             "/api/teams/:team_id/invitations",
             post(team_invitations::create),
         )

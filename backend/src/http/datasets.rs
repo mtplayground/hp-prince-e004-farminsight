@@ -11,6 +11,7 @@ use sqlx::types::Json as SqlJson;
 use uuid::Uuid;
 
 use crate::{
+    csv_parser::{parse_csv_metadata, parse_csv_preview, CsvParseError, CsvPreview},
     models::dataset::StoredFileReference,
     storage::StorageError,
 };
@@ -24,6 +25,11 @@ const DEFAULT_CSV_CONTENT_TYPE: &str = "text/csv";
 #[derive(Debug, Serialize)]
 pub(super) struct UploadResponse {
     dataset: DatasetResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct PreviewResponse {
+    preview: CsvPreview,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,11 +75,29 @@ pub enum UploadError {
     #[error("current user is not a member of the requested team")]
     ForbiddenTeam,
     #[error(transparent)]
+    CsvParse(#[from] CsvParseError),
+    #[error(transparent)]
     Multipart(#[from] axum::extract::multipart::MultipartError),
     #[error(transparent)]
     Storage(#[from] StorageError),
     #[error(transparent)]
     Database(#[from] sqlx::Error),
+}
+
+pub(super) async fn preview(
+    Extension(_context): Extension<CurrentAuthContext>,
+    multipart: Multipart,
+) -> Result<Json<PreviewResponse>, UploadError> {
+    let (csv, _) = read_csv_upload(multipart).await?;
+
+    if csv.bytes.len() > MAX_UPLOAD_BYTES {
+        return Err(UploadError::UploadTooLarge);
+    }
+    validate_csv_upload(&csv)?;
+
+    let preview = parse_csv_preview(&csv.bytes, 25)?;
+
+    Ok(Json(PreviewResponse { preview }))
 }
 
 pub(super) async fn upload(
@@ -104,10 +128,11 @@ pub(super) async fn upload(
         csv.filename.as_str(),
     );
     let byte_size = i64::try_from(csv.bytes.len()).map_err(|_| UploadError::UploadTooLarge)?;
-    let (row_count, column_count, column_names) = basic_csv_stats(&csv.bytes);
+    let (row_count, column_count, column_names) = parse_csv_metadata(&csv.bytes)?;
     let stats = json!({
         "source": "upload",
-        "raw_csv": true
+        "raw_csv": true,
+        "parser": "forgiving"
     });
 
     storage
@@ -228,26 +253,6 @@ fn validate_csv_upload(csv: &UploadedCsv) -> Result<(), UploadError> {
     } else {
         Err(UploadError::InvalidCsv)
     }
-}
-
-fn basic_csv_stats(bytes: &[u8]) -> (Option<i64>, Option<i32>, Vec<String>) {
-    let Ok(text) = std::str::from_utf8(bytes) else {
-        return (None, None, Vec::new());
-    };
-    let mut lines = text.lines().filter(|line| !line.trim().is_empty());
-    let Some(header) = lines.next() else {
-        return (Some(0), Some(0), Vec::new());
-    };
-    let column_names = header
-        .split(',')
-        .map(|name| name.trim().trim_matches('"').trim_matches('\''))
-        .filter(|name| !name.is_empty())
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    let row_count = lines.count() as i64;
-    let column_count = i32::try_from(column_names.len()).ok();
-
-    (Some(row_count), column_count, column_names)
 }
 
 async fn ensure_team_membership(
@@ -400,6 +405,16 @@ impl IntoResponse for UploadError {
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
                         error: "invalid_multipart",
+                    }),
+                )
+                    .into_response()
+            }
+            Self::CsvParse(error) => {
+                tracing::error!(%error, "failed to parse CSV preview");
+                (
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        error: "invalid_csv",
                     }),
                 )
                     .into_response()
