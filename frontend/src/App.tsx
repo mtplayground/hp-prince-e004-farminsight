@@ -20,7 +20,8 @@ const workflowItems = [
   },
   {
     title: 'Schema intelligence',
-    description: 'Detected column types and summary statistics will be surfaced from the backend API.',
+    description:
+      'Detected column types and summary statistics will be surfaced from the backend API.',
     icon: Layers3,
   },
   {
@@ -62,7 +63,9 @@ function App() {
       <header className="border-b border-stone-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-field">CSV analytics</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-field">
+              CSV analytics
+            </p>
             <h1 className="text-2xl font-semibold">Farminsight</h1>
           </div>
           <nav className="hidden items-center gap-2 md:flex" aria-label="Primary">
