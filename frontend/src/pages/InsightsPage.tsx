@@ -1,5 +1,8 @@
 import { BarChart3, Database, FileSpreadsheet, LineChart, UploadCloud } from 'lucide-react';
+import { useState } from 'react';
 
+import type { DatasetRecord } from '../api/datasets';
+import { DatasetUploadPanel } from '../components/DatasetUploadPanel';
 import { MetricTile } from '../layout/AppShell';
 
 const insightStages = [
@@ -21,6 +24,8 @@ const insightStages = [
 ];
 
 export function InsightsPage() {
+  const [activeDataset, setActiveDataset] = useState<DatasetRecord | null>(null);
+
   return (
     <div className="space-y-8">
       <section className="grid gap-6 xl:grid-cols-[1fr_320px]">
@@ -41,17 +46,23 @@ export function InsightsPage() {
             </span>
             <div>
               <p className="font-semibold">Active dataset</p>
-              <p className="text-sm text-stone-600">No dataset selected</p>
+              <p className="text-sm text-stone-600">
+                {activeDataset
+                  ? `${activeDataset.original_filename} · ${activeDataset.row_count ?? 0} rows`
+                  : 'No dataset selected'}
+              </p>
             </div>
           </div>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3" aria-label="Insight workspace metrics">
-        <MetricTile label="Datasets" value="0" icon={Database} />
+        <MetricTile label="Datasets" value={activeDataset ? '1' : '0'} icon={Database} />
         <MetricTile label="Insight sets" value="0" icon={BarChart3} />
         <MetricTile label="Chart specs" value="0" icon={LineChart} />
       </section>
+
+      <DatasetUploadPanel onDatasetUploaded={setActiveDataset} />
 
       <section className="grid gap-4 lg:grid-cols-3" aria-label="Insight workflow">
         {insightStages.map(({ label, description, icon: Icon }) => (
@@ -67,8 +78,9 @@ export function InsightsPage() {
         <div className="max-w-2xl">
           <h3 className="text-lg font-semibold">Insight canvas</h3>
           <p className="mt-2 text-sm leading-6 text-stone-600">
-            No dataset selected. This primary route keeps previews, summaries, charts, and
-            drill-down controls in one focused workspace.
+            {activeDataset
+              ? `${activeDataset.original_filename} is ready for schema profiling and insight generation.`
+              : 'No dataset selected. This primary route keeps previews, summaries, charts, and drill-down controls in one focused workspace.'}
           </p>
         </div>
       </section>
