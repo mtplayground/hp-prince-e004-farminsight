@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use chrono::NaiveDate;
 use serde::Serialize;
+use serde_json::{json, Value};
 
 use crate::csv_parser::CsvPreview;
 
@@ -60,6 +61,43 @@ pub fn profile_columns(preview: &CsvPreview) -> Vec<ColumnProfile> {
         .enumerate()
         .map(|(index, name)| profile_column(preview, index, name))
         .collect()
+}
+
+pub fn detected_schema_payload(profiles: &[ColumnProfile]) -> Value {
+    let columns = profiles
+        .iter()
+        .map(|profile| {
+            json!({
+                "index": profile.index,
+                "name": profile.name,
+                "inferred_type": profile.inferred_type,
+                "likely_meaning": profile.likely_meaning,
+                "confidence": profile.confidence,
+                "evidence": profile.evidence,
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "inference_version": 1,
+        "columns": columns
+    })
+}
+
+pub fn column_stats_payload(profiles: &[ColumnProfile]) -> Value {
+    profiles
+        .iter()
+        .map(|profile| {
+            json!({
+                "index": profile.index,
+                "name": profile.name,
+                "non_empty_count": profile.non_empty_count,
+                "blank_count": profile.blank_count,
+                "unique_count": profile.unique_count,
+                "sample_values": profile.sample_values,
+            })
+        })
+        .collect::<Value>()
 }
 
 fn profile_column(preview: &CsvPreview, index: usize, name: &str) -> ColumnProfile {
