@@ -16,6 +16,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let settings = Settings::from_env()?;
+    settings.log_summary();
     let db = db::connect(&settings).await?;
     db::migrate(&db).await?;
 
