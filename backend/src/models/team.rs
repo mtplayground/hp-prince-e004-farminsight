@@ -26,6 +26,20 @@ pub struct TeamMembership {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TeamInvitation {
+    pub id: Uuid,
+    pub team_id: Uuid,
+    pub email: String,
+    pub invited_by_sub: String,
+    pub accepted_by_sub: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TeamWithMembership {
     pub team: Team,
     pub membership: TeamMembership,

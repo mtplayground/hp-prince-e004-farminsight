@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 
 mod auth;
+mod team_invitations;
 pub mod middleware;
 
-use crate::{auth::AuthService, config::Settings};
+use crate::{auth::AuthService, config::Settings, email::EmailService};
 use axum::{
     extract::State, http::StatusCode, middleware as axum_middleware, response::IntoResponse,
-    routing::get, Json, Router,
+    routing::{get, post},
+    Json, Router,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -16,6 +18,7 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 pub struct AppState {
     db: PgPool,
     auth: Option<AuthService>,
+    email: Option<EmailService>,
     self_url: Option<String>,
 }
 
@@ -31,15 +34,25 @@ pub fn router(frontend_dist_dir: PathBuf, db: PgPool, settings: &Settings) -> Ro
     let spa_service = ServeDir::new(&frontend_dist_dir)
         .fallback(tower_http::services::ServeFile::new(frontend_dist_dir.join("index.html")));
     let auth = AuthService::from_settings(db.clone(), settings).ok();
+    let email = EmailService::from_settings(settings);
     let state = AppState {
         db,
         auth,
+        email,
         self_url: settings.self_url.clone(),
     };
 
     let protected_api = Router::new()
         .route("/api/auth/session", get(auth::session))
         .route("/api/auth/context", get(auth::context))
+        .route(
+            "/api/teams/:team_id/invitations",
+            post(team_invitations::create),
+        )
+        .route(
+            "/api/team-invitations/:token/accept",
+            post(team_invitations::accept),
+        )
         .route_layer(axum_middleware::from_fn_with_state(
             state.clone(),
             middleware::require_auth,
