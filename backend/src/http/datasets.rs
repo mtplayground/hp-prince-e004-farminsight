@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     csv_parser::{parse_csv_preview, CsvParseError, CsvPreview},
+    insights::generate_insights,
     models::dataset::StoredFileReference,
     profiling::{column_stats_payload, detected_schema_payload, profile_columns, ColumnProfile},
     storage::StorageError,
@@ -166,6 +167,7 @@ pub(super) async fn upload(
     let profiles = profile_columns(&parsed);
     let detected_schema = detected_schema_payload(&profiles);
     let column_stats = column_stats_payload(&profiles);
+    let insights = generate_insights(&parsed, &profiles);
     let row_count = i64::try_from(parsed.row_count).ok();
     let column_count = i32::try_from(parsed.column_count).ok();
     let column_names = parsed.columns.clone();
@@ -173,7 +175,8 @@ pub(super) async fn upload(
         "source": "upload",
         "raw_csv": true,
         "parser": "forgiving",
-        "schema_persisted": true
+        "schema_persisted": true,
+        "plain_language_insights": insights
     });
 
     storage
