@@ -19,7 +19,7 @@ import {
 type UploadState = 'idle' | 'previewing' | 'ready' | 'uploading' | 'uploaded';
 
 type DatasetUploadPanelProps = {
-  onDatasetUploaded: (dataset: DatasetRecord) => void;
+  onDatasetUploaded: (dataset: DatasetRecord, preview: CsvPreview) => void;
 };
 
 export function DatasetUploadPanel({ onDatasetUploaded }: DatasetUploadPanelProps) {
@@ -68,7 +68,7 @@ export function DatasetUploadPanel({ onDatasetUploaded }: DatasetUploadPanelProp
   }, []);
 
   const commitUpload = useCallback(() => {
-    if (!file || status !== 'ready') {
+    if (!file || !preview || status !== 'ready') {
       return;
     }
 
@@ -79,13 +79,13 @@ export function DatasetUploadPanel({ onDatasetUploaded }: DatasetUploadPanelProp
     uploadDatasetFile(file, controller.signal)
       .then((dataset) => {
         setStatus('uploaded');
-        onDatasetUploaded(dataset);
+        onDatasetUploaded(dataset, preview);
       })
       .catch((cause: unknown) => {
         setStatus('ready');
         setError(cause instanceof Error ? cause.message : 'Dataset upload failed');
       });
-  }, [file, onDatasetUploaded, status]);
+  }, [file, onDatasetUploaded, preview, status]);
 
   return (
     <section className="rounded-md border border-stone-200 bg-white">
