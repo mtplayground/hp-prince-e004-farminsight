@@ -1,7 +1,13 @@
 import { BarChart3, Database, FileSpreadsheet, LineChart, UploadCloud } from 'lucide-react';
 import { useCallback, useState } from 'react';
 
-import type { DatasetInsightsResponse, DatasetRecord } from '../api/datasets';
+import type {
+  CsvPreview,
+  DatasetChartSpec,
+  DatasetInsightsResponse,
+  DatasetRecord,
+} from '../api/datasets';
+import { AdaptiveChartGallery } from '../components/AdaptiveChartGallery';
 import { DatasetUploadPanel } from '../components/DatasetUploadPanel';
 import { InsightSummaryPanel } from '../components/InsightSummaryPanel';
 import { MetricTile } from '../layout/AppShell';
@@ -26,10 +32,14 @@ const insightStages = [
 
 export function InsightsPage() {
   const [activeDataset, setActiveDataset] = useState<DatasetRecord | null>(null);
+  const [activePreview, setActivePreview] = useState<CsvPreview | null>(null);
+  const [chartSpecs, setChartSpecs] = useState<DatasetChartSpec[]>([]);
   const [insightCounts, setInsightCounts] = useState({ insights: 0, chartSpecs: 0 });
 
-  const handleDatasetUploaded = useCallback((dataset: DatasetRecord) => {
+  const handleDatasetUploaded = useCallback((dataset: DatasetRecord, preview: CsvPreview) => {
     setActiveDataset(dataset);
+    setActivePreview(preview);
+    setChartSpecs(dataset.cached_chart_specs);
     setInsightCounts({
       insights: dataset.cached_insights.length,
       chartSpecs: dataset.cached_chart_specs.length,
@@ -37,6 +47,7 @@ export function InsightsPage() {
   }, []);
 
   const handleInsightsLoaded = useCallback((response: DatasetInsightsResponse) => {
+    setChartSpecs(response.chart_specs);
     setInsightCounts({
       insights: response.insights.length,
       chartSpecs: response.chart_specs.length,
@@ -91,15 +102,11 @@ export function InsightsPage() {
 
       <DatasetUploadPanel onDatasetUploaded={handleDatasetUploaded} />
 
-      <section className="grid gap-4 lg:grid-cols-3" aria-label="Insight workflow">
-        {insightStages.map(({ label, description, icon: Icon }) => (
-          <article key={label} className="rounded-md border border-stone-200 bg-white p-5">
-            <Icon className="h-5 w-5 text-field" aria-hidden="true" />
-            <h3 className="mt-4 text-base font-semibold">{label}</h3>
-            <p className="mt-2 text-sm leading-6 text-stone-600">{description}</p>
-          </article>
-        ))}
-      </section>
+      <AdaptiveChartGallery
+        dataset={activeDataset}
+        preview={activePreview}
+        chartSpecs={chartSpecs}
+      />
 
       <section className="rounded-md border border-dashed border-stone-300 bg-white p-6">
         <div className="max-w-2xl">
@@ -110,6 +117,16 @@ export function InsightsPage() {
               : 'No dataset selected. This primary route keeps previews, summaries, charts, and drill-down controls in one focused workspace.'}
           </p>
         </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3" aria-label="Insight workflow">
+        {insightStages.map(({ label, description, icon: Icon }) => (
+          <article key={label} className="rounded-md border border-stone-200 bg-white p-5">
+            <Icon className="h-5 w-5 text-field" aria-hidden="true" />
+            <h3 className="mt-4 text-base font-semibold">{label}</h3>
+            <p className="mt-2 text-sm leading-6 text-stone-600">{description}</p>
+          </article>
+        ))}
       </section>
     </div>
   );
