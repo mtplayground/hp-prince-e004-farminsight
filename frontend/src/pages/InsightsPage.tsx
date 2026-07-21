@@ -9,6 +9,7 @@ import type {
 } from '../api/datasets';
 import { AdaptiveChartGallery } from '../components/AdaptiveChartGallery';
 import { DatasetUploadPanel } from '../components/DatasetUploadPanel';
+import { DrillDownPanel } from '../components/DrillDownPanel';
 import { InsightSummaryPanel } from '../components/InsightSummaryPanel';
 import { MetricTile } from '../layout/AppShell';
 
@@ -107,6 +108,8 @@ export function InsightsPage() {
         preview={activePreview}
         chartSpecs={chartSpecs}
       />
+
+      <DrillDownPanel dataset={activeDataset} preview={activePreview} chartSpecs={chartSpecs} />
 
       <section className="rounded-md border border-dashed border-stone-300 bg-white p-6">
         <div className="max-w-2xl">
