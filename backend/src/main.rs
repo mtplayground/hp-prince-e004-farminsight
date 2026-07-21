@@ -26,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
     let settings = Settings::from_env()?;
     settings.log_summary();
     let db = db::connect(&settings).await?;
-    db::migrate(&db).await?;
+    db::migrate(&db, settings.migrations_dir.as_path()).await?;
 
     let app = http::router(settings.frontend_dist_dir.clone(), db, &settings);
     let bind_addr = settings.bind_addr();

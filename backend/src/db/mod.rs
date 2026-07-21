@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr, time::Duration};
+use std::{path::Path, str::FromStr, time::Duration};
 
 use anyhow::{Context, Result};
 use sqlx::{
@@ -25,9 +25,8 @@ pub async fn connect(settings: &Settings) -> Result<PgPool> {
         .context("failed to connect to PostgreSQL")
 }
 
-pub async fn migrate(pool: &PgPool) -> Result<()> {
-    let migrations_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations");
-    let migrator = Migrator::new(migrations_dir.as_path())
+pub async fn migrate(pool: &PgPool, migrations_dir: &Path) -> Result<()> {
+    let migrator = Migrator::new(migrations_dir)
         .await
         .context("failed to load PostgreSQL migrations")?;
 
