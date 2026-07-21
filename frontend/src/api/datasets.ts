@@ -15,6 +15,31 @@ export type StoredFileReference = {
   byte_size: number;
 };
 
+export type DatasetInsight = {
+  kind: string;
+  title: string;
+  summary: string;
+  evidence: string[];
+  confidence: number;
+};
+
+export type ChartField = {
+  index: number;
+  name: string;
+};
+
+export type DatasetChartSpec = {
+  id: string;
+  chart_type: string;
+  title: string;
+  rationale: string;
+  x: ChartField;
+  y: ChartField;
+  series: ChartField | null;
+  aggregation: string | null;
+  confidence: number;
+};
+
 export type DatasetRecord = {
   id: string;
   owner_sub: string;
@@ -25,9 +50,9 @@ export type DatasetRecord = {
   column_count: number | null;
   column_names: string[];
   detected_schema: Record<string, unknown>;
-  column_stats: unknown[];
-  cached_insights: unknown[];
-  cached_chart_specs: unknown[];
+  column_stats: Record<string, unknown>[];
+  cached_insights: DatasetInsight[];
+  cached_chart_specs: DatasetChartSpec[];
   stats: Record<string, unknown>;
   uploaded_at: string;
   created_at: string;
@@ -51,9 +76,9 @@ export type DatasetSchemaResponse = {
   column_count: number | null;
   column_names: string[];
   detected_schema: Record<string, unknown>;
-  column_stats: unknown[];
-  cached_insights: unknown[];
-  cached_chart_specs: unknown[];
+  column_stats: Record<string, unknown>[];
+  cached_insights: DatasetInsight[];
+  cached_chart_specs: DatasetChartSpec[];
   stats: Record<string, unknown>;
   uploaded_at: string;
 };
@@ -63,8 +88,8 @@ export type DatasetInsightsResponse = {
   owner_sub: string;
   team_id: string | null;
   original_filename: string;
-  insights: unknown[];
-  chart_specs: unknown[];
+  insights: DatasetInsight[];
+  chart_specs: DatasetChartSpec[];
   stats: Record<string, unknown>;
   uploaded_at: string;
 };
