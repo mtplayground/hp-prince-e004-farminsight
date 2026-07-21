@@ -7,6 +7,7 @@ pub struct Settings {
     pub host: String,
     pub port: u16,
     pub frontend_dist_dir: PathBuf,
+    pub migrations_dir: PathBuf,
     pub database_url: String,
     pub database_max_connections: u32,
     pub database_ssl_mode: Option<DatabaseSslMode>,
@@ -60,6 +61,9 @@ impl Settings {
         let frontend_dist_dir = env::var("FRONTEND_DIST_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("frontend/dist"));
+        let migrations_dir = env::var("MIGRATIONS_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("backend/migrations"));
         let database_url = env::var("DATABASE_URL").context("DATABASE_URL must be set")?;
         let database_max_connections = env::var("DATABASE_MAX_CONNECTIONS")
             .unwrap_or_else(|_| "5".to_owned())
@@ -80,6 +84,7 @@ impl Settings {
             host,
             port,
             frontend_dist_dir,
+            migrations_dir,
             database_url,
             database_max_connections,
             database_ssl_mode,
@@ -105,6 +110,7 @@ impl Settings {
             host = %self.host,
             port = self.port,
             frontend_dist_dir = %self.frontend_dist_dir.display(),
+            migrations_dir = %self.migrations_dir.display(),
             database_configured = !self.database_url.is_empty(),
             database_max_connections = self.database_max_connections,
             database_ssl_mode_override = self.database_ssl_mode.is_some(),
