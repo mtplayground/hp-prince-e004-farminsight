@@ -63,6 +63,18 @@ pub fn router(frontend_dist_dir: PathBuf, db: PgPool, settings: &Settings) -> Ro
         .route("/api/datasets/:dataset_id/schema", get(datasets::schema))
         .route("/api/datasets/:dataset_id/insights", get(datasets::insights))
         .route(
+            "/api/teams/:team_id/datasets/:dataset_id",
+            get(datasets::team_dataset),
+        )
+        .route(
+            "/api/teams/:team_id/datasets/:dataset_id/schema",
+            get(datasets::team_schema),
+        )
+        .route(
+            "/api/teams/:team_id/datasets/:dataset_id/insights",
+            get(datasets::team_insights),
+        )
+        .route(
             "/api/teams/:team_id/invitations",
             post(team_invitations::create),
         )

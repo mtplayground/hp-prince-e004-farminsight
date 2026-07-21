@@ -31,6 +31,11 @@ pub(super) struct UploadResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub(super) struct TeamDatasetResponse {
+    dataset: DatasetResponse,
+}
+
+#[derive(Debug, Serialize)]
 pub(super) struct PreviewResponse {
     preview: CsvPreview,
     profiles: Vec<ColumnProfile>,
@@ -160,6 +165,57 @@ pub(super) async fn insights(
     let insights = fetch_dataset_insights(&state, dataset_id, context.user.identity.sub.as_str())
         .await?
         .ok_or(UploadError::DatasetNotFound)?;
+
+    Ok(Json(insights))
+}
+
+pub(super) async fn team_dataset(
+    State(state): State<AppState>,
+    Extension(context): Extension<CurrentAuthContext>,
+    Path((team_id, dataset_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<TeamDatasetResponse>, UploadError> {
+    let dataset = fetch_team_dataset(
+        &state,
+        team_id,
+        dataset_id,
+        context.user.identity.sub.as_str(),
+    )
+    .await?
+    .ok_or(UploadError::DatasetNotFound)?;
+
+    Ok(Json(TeamDatasetResponse { dataset }))
+}
+
+pub(super) async fn team_schema(
+    State(state): State<AppState>,
+    Extension(context): Extension<CurrentAuthContext>,
+    Path((team_id, dataset_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<SchemaResponse>, UploadError> {
+    let schema = fetch_team_dataset_schema(
+        &state,
+        team_id,
+        dataset_id,
+        context.user.identity.sub.as_str(),
+    )
+    .await?
+    .ok_or(UploadError::DatasetNotFound)?;
+
+    Ok(Json(schema))
+}
+
+pub(super) async fn team_insights(
+    State(state): State<AppState>,
+    Extension(context): Extension<CurrentAuthContext>,
+    Path((team_id, dataset_id)): Path<(Uuid, Uuid)>,
+) -> Result<Json<InsightsResponse>, UploadError> {
+    let insights = fetch_team_dataset_insights(
+        &state,
+        team_id,
+        dataset_id,
+        context.user.identity.sub.as_str(),
+    )
+    .await?
+    .ok_or(UploadError::DatasetNotFound)?;
 
     Ok(Json(insights))
 }
@@ -396,6 +452,29 @@ struct DatasetTimestamps {
     updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct DatasetDetailRow {
+    id: Uuid,
+    owner_sub: String,
+    team_id: Option<Uuid>,
+    original_filename: String,
+    storage_bucket: String,
+    storage_key: String,
+    content_type: Option<String>,
+    byte_size: i64,
+    row_count: Option<i64>,
+    column_count: Option<i32>,
+    column_names: SqlJson<Vec<String>>,
+    detected_schema: SqlJson<Value>,
+    column_stats: SqlJson<Value>,
+    cached_insights: SqlJson<Value>,
+    cached_chart_specs: SqlJson<Value>,
+    stats: SqlJson<Value>,
+    uploaded_at: DateTime<Utc>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
 async fn fetch_dataset_schema(
     state: &AppState,
     dataset_id: Uuid,
@@ -527,6 +606,237 @@ async fn fetch_dataset_insights(
           )
         "#,
     )
+    .bind(dataset_id)
+    .bind(user_sub)
+    .fetch_optional(&state.db)
+    .await?
+    .map(
+        |(
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            SqlJson(insights),
+            SqlJson(chart_specs),
+            SqlJson(stats),
+            uploaded_at,
+        )| InsightsResponse {
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            insights,
+            chart_specs,
+            stats,
+            uploaded_at,
+        },
+    );
+
+    Ok(insights)
+}
+
+async fn fetch_team_dataset(
+    state: &AppState,
+    team_id: Uuid,
+    dataset_id: Uuid,
+    user_sub: &str,
+) -> Result<Option<DatasetResponse>, UploadError> {
+    let dataset = sqlx::query_as::<_, DatasetDetailRow>(
+        r#"
+        SELECT
+            d.id,
+            d.owner_sub,
+            d.team_id,
+            d.original_filename,
+            d.storage_bucket,
+            d.storage_key,
+            d.content_type,
+            d.byte_size,
+            d.row_count,
+            d.column_count,
+            d.column_names,
+            d.detected_schema,
+            d.column_stats,
+            d.cached_insights,
+            d.cached_chart_specs,
+            d.stats,
+            d.uploaded_at,
+            d.created_at,
+            d.updated_at
+        FROM datasets d
+        WHERE d.id = $2
+          AND d.team_id = $1
+          AND EXISTS (
+            SELECT 1
+            FROM team_memberships tm
+            WHERE tm.team_id = $1
+              AND tm.user_sub = $3
+          )
+        "#,
+    )
+    .bind(team_id)
+    .bind(dataset_id)
+    .bind(user_sub)
+    .fetch_optional(&state.db)
+    .await?
+    .map(|row| DatasetResponse {
+        id: row.id,
+        owner_sub: row.owner_sub,
+        team_id: row.team_id,
+        original_filename: row.original_filename,
+        storage: StoredFileReference {
+            bucket: row.storage_bucket,
+            key: row.storage_key,
+            content_type: row.content_type,
+            byte_size: row.byte_size,
+        },
+        row_count: row.row_count,
+        column_count: row.column_count,
+        column_names: row.column_names.0,
+        detected_schema: row.detected_schema.0,
+        column_stats: row.column_stats.0,
+        cached_insights: row.cached_insights.0,
+        cached_chart_specs: row.cached_chart_specs.0,
+        stats: row.stats.0,
+        uploaded_at: row.uploaded_at,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    });
+
+    Ok(dataset)
+}
+
+async fn fetch_team_dataset_schema(
+    state: &AppState,
+    team_id: Uuid,
+    dataset_id: Uuid,
+    user_sub: &str,
+) -> Result<Option<SchemaResponse>, UploadError> {
+    let schema = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            Option<Uuid>,
+            String,
+            Option<i64>,
+            Option<i32>,
+            SqlJson<Vec<String>>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            DateTime<Utc>,
+        ),
+    >(
+        r#"
+        SELECT
+            d.id,
+            d.owner_sub,
+            d.team_id,
+            d.original_filename,
+            d.row_count,
+            d.column_count,
+            d.column_names,
+            d.detected_schema,
+            d.column_stats,
+            d.cached_insights,
+            d.cached_chart_specs,
+            d.stats,
+            d.uploaded_at
+        FROM datasets d
+        WHERE d.id = $2
+          AND d.team_id = $1
+          AND EXISTS (
+            SELECT 1
+            FROM team_memberships tm
+            WHERE tm.team_id = $1
+              AND tm.user_sub = $3
+          )
+        "#,
+    )
+    .bind(team_id)
+    .bind(dataset_id)
+    .bind(user_sub)
+    .fetch_optional(&state.db)
+    .await?
+    .map(
+        |(
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            row_count,
+            column_count,
+            SqlJson(column_names),
+            SqlJson(detected_schema),
+            SqlJson(column_stats),
+            SqlJson(cached_insights),
+            SqlJson(cached_chart_specs),
+            SqlJson(stats),
+            uploaded_at,
+        )| SchemaResponse {
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            row_count,
+            column_count,
+            column_names,
+            detected_schema,
+            column_stats,
+            cached_insights,
+            cached_chart_specs,
+            stats,
+            uploaded_at,
+        },
+    );
+
+    Ok(schema)
+}
+
+async fn fetch_team_dataset_insights(
+    state: &AppState,
+    team_id: Uuid,
+    dataset_id: Uuid,
+    user_sub: &str,
+) -> Result<Option<InsightsResponse>, UploadError> {
+    let insights = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            Option<Uuid>,
+            String,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            DateTime<Utc>,
+        ),
+    >(
+        r#"
+        SELECT
+            d.id,
+            d.owner_sub,
+            d.team_id,
+            d.original_filename,
+            d.cached_insights,
+            d.cached_chart_specs,
+            d.stats,
+            d.uploaded_at
+        FROM datasets d
+        WHERE d.id = $2
+          AND d.team_id = $1
+          AND EXISTS (
+            SELECT 1
+            FROM team_memberships tm
+            WHERE tm.team_id = $1
+              AND tm.user_sub = $3
+          )
+        "#,
+    )
+    .bind(team_id)
     .bind(dataset_id)
     .bind(user_sub)
     .fetch_optional(&state.db)

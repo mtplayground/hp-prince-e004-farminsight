@@ -67,6 +67,10 @@ type UploadResponse = {
   dataset: DatasetRecord;
 };
 
+type TeamDatasetResponse = {
+  dataset: DatasetRecord;
+};
+
 export type DatasetSchemaResponse = {
   dataset_id: string;
   owner_sub: string;
@@ -152,10 +156,62 @@ export async function fetchDatasetInsights(datasetId: string, signal?: AbortSign
   return (await response.json()) as DatasetInsightsResponse;
 }
 
+export async function fetchTeamDataset(teamId: string, datasetId: string, signal?: AbortSignal) {
+  const response = await fetch(teamDatasetPath(teamId, datasetId), {
+    credentials: 'include',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await datasetErrorMessage(response, 'Team dataset fetch failed'));
+  }
+
+  const body = (await response.json()) as TeamDatasetResponse;
+  return body.dataset;
+}
+
+export async function fetchTeamDatasetSchema(
+  teamId: string,
+  datasetId: string,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(`${teamDatasetPath(teamId, datasetId)}/schema`, {
+    credentials: 'include',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await datasetErrorMessage(response, 'Team dataset schema fetch failed'));
+  }
+
+  return (await response.json()) as DatasetSchemaResponse;
+}
+
+export async function fetchTeamDatasetInsights(
+  teamId: string,
+  datasetId: string,
+  signal?: AbortSignal,
+) {
+  const response = await fetch(`${teamDatasetPath(teamId, datasetId)}/insights`, {
+    credentials: 'include',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await datasetErrorMessage(response, 'Team dataset insights fetch failed'));
+  }
+
+  return (await response.json()) as DatasetInsightsResponse;
+}
+
 function datasetForm(file: File) {
   const form = new FormData();
   form.append('file', file);
   return form;
+}
+
+function teamDatasetPath(teamId: string, datasetId: string) {
+  return `/api/teams/${encodeURIComponent(teamId)}/datasets/${encodeURIComponent(datasetId)}`;
 }
 
 async function datasetErrorMessage(response: Response, fallback: string) {
