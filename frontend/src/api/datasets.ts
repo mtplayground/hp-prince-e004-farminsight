@@ -58,6 +58,17 @@ export type DatasetSchemaResponse = {
   uploaded_at: string;
 };
 
+export type DatasetInsightsResponse = {
+  dataset_id: string;
+  owner_sub: string;
+  team_id: string | null;
+  original_filename: string;
+  insights: unknown[];
+  chart_specs: unknown[];
+  stats: Record<string, unknown>;
+  uploaded_at: string;
+};
+
 export async function previewDatasetFile(file: File, signal?: AbortSignal) {
   const response = await fetch('/api/datasets/preview', {
     method: 'POST',
@@ -101,6 +112,19 @@ export async function fetchDatasetSchema(datasetId: string, signal?: AbortSignal
   }
 
   return (await response.json()) as DatasetSchemaResponse;
+}
+
+export async function fetchDatasetInsights(datasetId: string, signal?: AbortSignal) {
+  const response = await fetch(`/api/datasets/${encodeURIComponent(datasetId)}/insights`, {
+    credentials: 'include',
+    signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(await datasetErrorMessage(response, 'Dataset insights fetch failed'));
+  }
+
+  return (await response.json()) as DatasetInsightsResponse;
 }
 
 function datasetForm(file: File) {

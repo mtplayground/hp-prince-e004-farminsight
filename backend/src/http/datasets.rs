@@ -54,6 +54,18 @@ pub(super) struct SchemaResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub(super) struct InsightsResponse {
+    dataset_id: Uuid,
+    owner_sub: String,
+    team_id: Option<Uuid>,
+    original_filename: String,
+    insights: Value,
+    chart_specs: Value,
+    stats: Value,
+    uploaded_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
 struct DatasetResponse {
     id: Uuid,
     owner_sub: String,
@@ -138,6 +150,18 @@ pub(super) async fn schema(
         .ok_or(UploadError::DatasetNotFound)?;
 
     Ok(Json(schema))
+}
+
+pub(super) async fn insights(
+    State(state): State<AppState>,
+    Extension(context): Extension<CurrentAuthContext>,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<InsightsResponse>, UploadError> {
+    let insights = fetch_dataset_insights(&state, dataset_id, context.user.identity.sub.as_str())
+        .await?
+        .ok_or(UploadError::DatasetNotFound)?;
+
+    Ok(Json(insights))
 }
 
 pub(super) async fn upload(
@@ -460,6 +484,76 @@ async fn fetch_dataset_schema(
     );
 
     Ok(schema)
+}
+
+async fn fetch_dataset_insights(
+    state: &AppState,
+    dataset_id: Uuid,
+    user_sub: &str,
+) -> Result<Option<InsightsResponse>, UploadError> {
+    let insights = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            Option<Uuid>,
+            String,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            SqlJson<Value>,
+            DateTime<Utc>,
+        ),
+    >(
+        r#"
+        SELECT
+            d.id,
+            d.owner_sub,
+            d.team_id,
+            d.original_filename,
+            d.cached_insights,
+            d.cached_chart_specs,
+            d.stats,
+            d.uploaded_at
+        FROM datasets d
+        WHERE d.id = $1
+          AND (
+            d.owner_sub = $2
+            OR EXISTS (
+              SELECT 1
+              FROM team_memberships tm
+              WHERE tm.team_id = d.team_id
+                AND tm.user_sub = $2
+            )
+          )
+        "#,
+    )
+    .bind(dataset_id)
+    .bind(user_sub)
+    .fetch_optional(&state.db)
+    .await?
+    .map(
+        |(
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            SqlJson(insights),
+            SqlJson(chart_specs),
+            SqlJson(stats),
+            uploaded_at,
+        )| InsightsResponse {
+            dataset_id,
+            owner_sub,
+            team_id,
+            original_filename,
+            insights,
+            chart_specs,
+            stats,
+            uploaded_at,
+        },
+    );
+
+    Ok(insights)
 }
 
 async fn insert_dataset(
