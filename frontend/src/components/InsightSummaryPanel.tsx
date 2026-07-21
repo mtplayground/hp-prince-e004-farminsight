@@ -66,6 +66,7 @@ export function InsightSummaryPanel({ dataset, onInsightsLoaded }: InsightSummar
   const chartSpecs = currentLoadedInsights?.chartSpecs ?? dataset?.cached_chart_specs ?? [];
   const status: InsightLoadState = !dataset ? 'idle' : (currentLoadedInsights?.status ?? 'loading');
   const error = currentLoadedInsights?.error ?? null;
+  const parserWarnings = dataset ? parserWarningList(dataset.stats) : [];
   const topInsight = insights[0] ?? null;
   const supportingInsights = insights.slice(1, 4);
 
@@ -131,6 +132,20 @@ export function InsightSummaryPanel({ dataset, onInsightsLoaded }: InsightSummar
         </div>
       )}
 
+      {parserWarnings.length > 0 && (
+        <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            Parser recovery notes
+          </div>
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-amber-800">
+            {parserWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {topInsight?.evidence && topInsight.evidence.length > 0 && (
         <div className="mt-5 rounded-md border border-stone-200 bg-stone-50 p-4">
           <p className="text-sm font-semibold text-stone-800">Evidence</p>
@@ -193,4 +208,13 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
 
 function kindLabel(kind: string) {
   return kind.replaceAll('_', ' ');
+}
+
+function parserWarningList(stats: Record<string, unknown>) {
+  const warnings = stats.parser_warnings;
+  if (!Array.isArray(warnings)) {
+    return [];
+  }
+
+  return warnings.filter((warning): warning is string => typeof warning === 'string').slice(0, 3);
 }

@@ -100,6 +100,7 @@ struct UploadedCsv {
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
     error: &'static str,
+    message: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -110,6 +111,8 @@ pub enum UploadError {
     InvalidCsv,
     #[error("uploaded file is too large")]
     UploadTooLarge,
+    #[error("CSV file has headers but no data rows")]
+    NoDataRows,
     #[error("invalid team id")]
     InvalidTeamId,
     #[error("team not found")]
@@ -249,6 +252,9 @@ pub(super) async fn upload(
     );
     let byte_size = i64::try_from(csv.bytes.len()).map_err(|_| UploadError::UploadTooLarge)?;
     let parsed = parse_csv_preview(&csv.bytes, 200)?;
+    if parsed.row_count == 0 {
+        return Err(UploadError::NoDataRows);
+    }
     let profiles = profile_columns(&parsed);
     let detected_schema = detected_schema_payload(&profiles);
     let column_stats = column_stats_payload(&profiles);
@@ -259,10 +265,14 @@ pub(super) async fn upload(
     let row_count = i64::try_from(parsed.row_count).ok();
     let column_count = i32::try_from(parsed.column_count).ok();
     let column_names = parsed.columns.clone();
+    let parser_warnings = parsed.warnings.clone();
+    let preview_row_count = parsed.rows.len();
     let stats = json!({
         "source": "upload",
         "raw_csv": true,
         "parser": "forgiving",
+        "parser_warnings": parser_warnings,
+        "preview_row_count": preview_row_count,
         "schema_persisted": true,
         "insights_cached": true,
         "chart_specs_cached": true
@@ -928,6 +938,7 @@ impl IntoResponse for UploadError {
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: "missing_file",
+                    message: "Choose a CSV file before previewing or uploading.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -935,6 +946,7 @@ impl IntoResponse for UploadError {
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: "invalid_csv",
+                    message: "Use a CSV, text, semicolon, tab, or pipe-delimited file.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -942,6 +954,15 @@ impl IntoResponse for UploadError {
                 StatusCode::PAYLOAD_TOO_LARGE,
                 Json(ErrorResponse {
                     error: "upload_too_large",
+                    message: "The CSV is larger than the 50 MB upload limit.".to_owned(),
+                }),
+            )
+                .into_response(),
+            Self::NoDataRows => (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "no_data_rows",
+                    message: "The CSV has headers but no data rows to analyze.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -949,6 +970,7 @@ impl IntoResponse for UploadError {
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: "invalid_team_id",
+                    message: "Team ID must be a valid UUID.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -956,6 +978,7 @@ impl IntoResponse for UploadError {
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse {
                     error: "team_not_found",
+                    message: "That team does not exist.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -963,6 +986,7 @@ impl IntoResponse for UploadError {
                 StatusCode::FORBIDDEN,
                 Json(ErrorResponse {
                     error: "team_forbidden",
+                    message: "You must be a team member to use that team dataset.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -970,6 +994,7 @@ impl IntoResponse for UploadError {
                 StatusCode::NOT_FOUND,
                 Json(ErrorResponse {
                     error: "dataset_not_found",
+                    message: "That dataset was not found or is not shared with you.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -979,6 +1004,8 @@ impl IntoResponse for UploadError {
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
                         error: "invalid_multipart",
+                        message: "The upload form could not be read. Choose the file again."
+                            .to_owned(),
                     }),
                 )
                     .into_response()
@@ -989,6 +1016,7 @@ impl IntoResponse for UploadError {
                     StatusCode::BAD_REQUEST,
                     Json(ErrorResponse {
                         error: "invalid_csv",
+                        message: format!("{error}. Check the delimiter, quoting, and data rows."),
                     }),
                 )
                     .into_response()
@@ -997,6 +1025,7 @@ impl IntoResponse for UploadError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(ErrorResponse {
                     error: "object_storage_not_configured",
+                    message: "Dataset storage is not configured for this deployment.".to_owned(),
                 }),
             )
                 .into_response(),
@@ -1006,6 +1035,8 @@ impl IntoResponse for UploadError {
                     StatusCode::BAD_GATEWAY,
                     Json(ErrorResponse {
                         error: "object_storage_failed",
+                        message: "The CSV parsed successfully, but storage failed. Try again shortly."
+                            .to_owned(),
                     }),
                 )
                     .into_response()
@@ -1016,6 +1047,8 @@ impl IntoResponse for UploadError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(ErrorResponse {
                         error: "dataset_create_failed",
+                        message: "The CSV parsed successfully, but dataset metadata could not be saved."
+                            .to_owned(),
                     }),
                 )
                     .into_response()
