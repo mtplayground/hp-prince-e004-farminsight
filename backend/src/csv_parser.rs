@@ -35,6 +35,12 @@ pub fn parse_csv_preview(
         .from_reader(bytes);
     let mut records = Vec::new();
     let mut warnings = Vec::new();
+    if std::str::from_utf8(bytes).is_err() {
+        warnings.push(
+            "Some bytes were not valid UTF-8; unreadable characters were replaced for preview."
+                .to_owned(),
+        );
+    }
 
     for result in reader.byte_records() {
         match result {
@@ -122,6 +128,12 @@ fn build_preview(
     if saw_wide_row {
         warnings.push(
             "Some rows had extra fields; preview columns were added for the widest rows.".to_owned(),
+        );
+    }
+    if row_count == 0 {
+        warnings.push(
+            "CSV has headers but no data rows; add at least one data row before committing."
+                .to_owned(),
         );
     }
 
@@ -278,5 +290,26 @@ mod tests {
             parse_csv_preview(b",name,name\n1,A,B\n", 5).expect("preview should parse");
 
         assert_eq!(preview.columns, vec!["column_1", "name", "name_2"]);
+    }
+
+    #[test]
+    fn warns_when_csv_has_headers_but_no_data_rows() {
+        let preview = parse_csv_preview(b"field,yield\n", 10).expect("preview should parse");
+
+        assert_eq!(preview.row_count, 0);
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no data rows")));
+    }
+
+    #[test]
+    fn warns_when_non_utf8_bytes_are_recovered() {
+        let preview = parse_csv_preview(b"name,value\nNorth,\xFF\n", 10).expect("preview should parse");
+
+        assert!(preview
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("not valid UTF-8")));
     }
 }

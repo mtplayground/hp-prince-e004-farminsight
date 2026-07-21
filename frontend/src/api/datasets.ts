@@ -216,13 +216,35 @@ function teamDatasetPath(teamId: string, datasetId: string) {
 
 async function datasetErrorMessage(response: Response, fallback: string) {
   try {
-    const body = (await response.json()) as { error?: string };
+    const body = (await response.json()) as { error?: string; message?: string };
+    if (body.message) {
+      return `${fallback}: ${body.message}`;
+    }
     if (body.error) {
-      return `${fallback}: ${body.error}`;
+      return `${fallback}: ${datasetErrorLabel(body.error)}`;
     }
   } catch {
     // Use the HTTP status when the API cannot return JSON.
   }
 
   return `${fallback}: ${response.status}`;
+}
+
+function datasetErrorLabel(code: string) {
+  switch (code) {
+    case 'missing_file':
+      return 'choose a CSV file before continuing';
+    case 'invalid_csv':
+      return 'use a CSV, text, semicolon, tab, or pipe-delimited file';
+    case 'no_data_rows':
+      return 'the CSV has headers but no data rows to analyze';
+    case 'upload_too_large':
+      return 'the CSV is larger than the 50 MB upload limit';
+    case 'object_storage_failed':
+      return 'the CSV parsed, but storage failed. Try again shortly';
+    case 'dataset_create_failed':
+      return 'the CSV parsed, but dataset metadata could not be saved';
+    default:
+      return code.replaceAll('_', ' ');
+  }
 }

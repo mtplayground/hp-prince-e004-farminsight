@@ -65,10 +65,40 @@ fn dataset_shape_insight(preview: &CsvPreview, profiles: &[ColumnProfile]) -> Op
         })
         .count();
 
-    Some(Insight {
-        kind: InsightKind::DatasetShape,
-        title: "Dataset is ready for a quick scan".to_owned(),
-        summary: format!(
+    let mut evidence = vec![format!(
+        "Parser used '{}' as the delimiter and kept {} preview rows.",
+        preview.delimiter,
+        preview.rows.len()
+    )];
+    evidence.extend(preview.warnings.iter().take(2).cloned());
+
+    if preview.row_count == 0 {
+        return Some(Insight {
+            kind: InsightKind::DataQuality,
+            title: "Dataset needs data rows before insights".to_owned(),
+            summary: format!(
+                "I found {} column{} but no data rows, so trends, comparisons, and charts are not reliable yet.",
+                preview.column_count,
+                plural_suffix(preview.column_count)
+            ),
+            evidence,
+            confidence: 0.35,
+        });
+    }
+
+    let unstructured = numeric_count == 0 && category_count == 0;
+    let title = if unstructured {
+        "Dataset structure is limited"
+    } else {
+        "Dataset is ready for a quick scan"
+    };
+    let summary = if unstructured {
+        format!(
+            "I found {} rows and {} columns, but no clear numeric measures or grouping fields. Treat summaries as data-quality notes until the columns are cleaned.",
+            preview.row_count, preview.column_count
+        )
+    } else {
+        format!(
             "I found {} rows and {} columns, including {} numeric measure{} and {} likely grouping field{}.",
             preview.row_count,
             preview.column_count,
@@ -76,13 +106,25 @@ fn dataset_shape_insight(preview: &CsvPreview, profiles: &[ColumnProfile]) -> Op
             plural_suffix(numeric_count),
             category_count,
             plural_suffix(category_count)
-        ),
-        evidence: vec![format!(
-            "Parser used '{}' as the delimiter and kept {} preview rows.",
-            preview.delimiter,
-            preview.rows.len()
-        )],
-        confidence: if preview.truncated { 0.72 } else { 0.82 },
+        )
+    };
+
+    Some(Insight {
+        kind: if unstructured {
+            InsightKind::DataQuality
+        } else {
+            InsightKind::DatasetShape
+        },
+        title: title.to_owned(),
+        summary,
+        evidence,
+        confidence: if unstructured {
+            0.55
+        } else if preview.truncated || !preview.warnings.is_empty() {
+            0.72
+        } else {
+            0.82
+        },
     })
 }
 
@@ -322,6 +364,16 @@ fn category_mix_for_column(preview: &CsvPreview, profile: &ColumnProfile) -> Opt
 fn data_quality_insights(preview: &CsvPreview, profiles: &[ColumnProfile]) -> Vec<Insight> {
     let mut insights = Vec::new();
 
+    if !preview.warnings.is_empty() {
+        insights.push(Insight {
+            kind: InsightKind::DataQuality,
+            title: "Parser recovered messy CSV structure".to_owned(),
+            summary: "Some rows needed parser recovery or normalization, so read trend and comparison findings as directional until the source CSV is cleaned.".to_owned(),
+            evidence: preview.warnings.iter().take(3).cloned().collect(),
+            confidence: 0.76,
+        });
+    }
+
     if let Some(profile) = profiles
         .iter()
         .filter(|profile| profile.blank_count > 0)
@@ -502,5 +554,30 @@ mod tests {
             .iter()
             .any(|insight| insight.kind == InsightKind::DataQuality
                 && insight.summary.contains("blank")));
+    }
+
+    #[test]
+    fn warns_instead_of_overstating_header_only_csvs() {
+        let preview = parse_csv_preview(b"field,season,yield\n", 25).expect("CSV should parse");
+        let profiles = profile_columns(&preview);
+        let insights = generate_insights(&preview, &profiles);
+
+        let first = insights.first().expect("quality insight should be present");
+        assert_eq!(first.kind, InsightKind::DataQuality);
+        assert!(first.title.contains("needs data rows"));
+        assert!(first.summary.contains("not reliable"));
+    }
+
+    #[test]
+    fn surfaces_parser_recovery_notes_as_data_quality() {
+        let preview =
+            parse_csv_preview(b"field,yield\nNorth,180\nSouth\n", 25).expect("CSV should parse");
+        let profiles = profile_columns(&preview);
+        let insights = generate_insights(&preview, &profiles);
+
+        assert!(insights.iter().any(|insight| {
+            insight.kind == InsightKind::DataQuality
+                && insight.title.contains("messy CSV structure")
+        }));
     }
 }

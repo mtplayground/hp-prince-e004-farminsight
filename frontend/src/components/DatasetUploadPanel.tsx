@@ -71,6 +71,10 @@ export function DatasetUploadPanel({ onDatasetUploaded }: DatasetUploadPanelProp
     if (!file || !preview || status !== 'ready') {
       return;
     }
+    if (preview.row_count === 0) {
+      setError('Add at least one data row before committing this CSV.');
+      return;
+    }
 
     const controller = new AbortController();
     setStatus('uploading');
@@ -86,6 +90,8 @@ export function DatasetUploadPanel({ onDatasetUploaded }: DatasetUploadPanelProp
         setError(cause instanceof Error ? cause.message : 'Dataset upload failed');
       });
   }, [file, onDatasetUploaded, preview, status]);
+
+  const canCommit = status === 'ready' && preview !== null && preview.row_count > 0;
 
   return (
     <section className="rounded-md border border-stone-200 bg-white">
@@ -159,7 +165,7 @@ export function DatasetUploadPanel({ onDatasetUploaded }: DatasetUploadPanelProp
             <button
               type="button"
               onClick={commitUpload}
-              disabled={status !== 'ready'}
+              disabled={!canCommit}
               className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-field px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600"
             >
               {status === 'uploading' ? (
@@ -283,6 +289,12 @@ function PreviewSurface({ preview, status }: { preview: CsvPreview | null; statu
 
       {preview.truncated && (
         <p className="text-xs text-stone-500">Showing the first {preview.rows.length} rows.</p>
+      )}
+
+      {preview.row_count === 0 && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          This file has headers but no data rows, so it cannot be committed for insights yet.
+        </p>
       )}
     </div>
   );
