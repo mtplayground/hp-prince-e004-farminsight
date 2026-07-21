@@ -1,8 +1,9 @@
 import { BarChart3, Database, FileSpreadsheet, LineChart, UploadCloud } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
-import type { DatasetRecord } from '../api/datasets';
+import type { DatasetInsightsResponse, DatasetRecord } from '../api/datasets';
 import { DatasetUploadPanel } from '../components/DatasetUploadPanel';
+import { InsightSummaryPanel } from '../components/InsightSummaryPanel';
 import { MetricTile } from '../layout/AppShell';
 
 const insightStages = [
@@ -25,6 +26,22 @@ const insightStages = [
 
 export function InsightsPage() {
   const [activeDataset, setActiveDataset] = useState<DatasetRecord | null>(null);
+  const [insightCounts, setInsightCounts] = useState({ insights: 0, chartSpecs: 0 });
+
+  const handleDatasetUploaded = useCallback((dataset: DatasetRecord) => {
+    setActiveDataset(dataset);
+    setInsightCounts({
+      insights: dataset.cached_insights.length,
+      chartSpecs: dataset.cached_chart_specs.length,
+    });
+  }, []);
+
+  const handleInsightsLoaded = useCallback((response: DatasetInsightsResponse) => {
+    setInsightCounts({
+      insights: response.insights.length,
+      chartSpecs: response.chart_specs.length,
+    });
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -58,11 +75,21 @@ export function InsightsPage() {
 
       <section className="grid gap-4 md:grid-cols-3" aria-label="Insight workspace metrics">
         <MetricTile label="Datasets" value={activeDataset ? '1' : '0'} icon={Database} />
-        <MetricTile label="Insight sets" value="0" icon={BarChart3} />
-        <MetricTile label="Chart specs" value="0" icon={LineChart} />
+        <MetricTile
+          label="Insight sets"
+          value={insightCounts.insights.toLocaleString()}
+          icon={BarChart3}
+        />
+        <MetricTile
+          label="Chart specs"
+          value={insightCounts.chartSpecs.toLocaleString()}
+          icon={LineChart}
+        />
       </section>
 
-      <DatasetUploadPanel onDatasetUploaded={setActiveDataset} />
+      <InsightSummaryPanel dataset={activeDataset} onInsightsLoaded={handleInsightsLoaded} />
+
+      <DatasetUploadPanel onDatasetUploaded={handleDatasetUploaded} />
 
       <section className="grid gap-4 lg:grid-cols-3" aria-label="Insight workflow">
         {insightStages.map(({ label, description, icon: Icon }) => (
@@ -79,7 +106,7 @@ export function InsightsPage() {
           <h3 className="text-lg font-semibold">Insight canvas</h3>
           <p className="mt-2 text-sm leading-6 text-stone-600">
             {activeDataset
-              ? `${activeDataset.original_filename} is ready for schema profiling and insight generation.`
+              ? `${activeDataset.original_filename} is ready for chart rendering and drill-down controls.`
               : 'No dataset selected. This primary route keeps previews, summaries, charts, and drill-down controls in one focused workspace.'}
           </p>
         </div>
