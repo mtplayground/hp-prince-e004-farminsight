@@ -3,6 +3,7 @@ use std::path::PathBuf;
 mod auth;
 mod datasets;
 mod team_invitations;
+mod team_members;
 pub mod middleware;
 
 use crate::{auth::AuthService, config::Settings, email::EmailService, storage::StorageClient};
@@ -78,6 +79,7 @@ pub fn router(frontend_dist_dir: PathBuf, db: PgPool, settings: &Settings) -> Ro
             "/api/teams/:team_id/invitations",
             post(team_invitations::create),
         )
+        .route("/api/teams/:team_id/members", get(team_members::list))
         .route(
             "/api/team-invitations/:token/accept",
             post(team_invitations::accept),

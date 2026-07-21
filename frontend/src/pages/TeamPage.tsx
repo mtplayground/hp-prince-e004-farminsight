@@ -4,10 +4,13 @@ import {
   CheckCircle2,
   Database,
   Loader2,
+  MailPlus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sparkles,
   Table2,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import { useCallback, useMemo, useState, type FormEvent } from 'react';
@@ -22,6 +25,12 @@ import {
   fetchTeamDatasetInsights,
   fetchTeamDatasetSchema,
 } from '../api/datasets';
+import {
+  createTeamInvitation,
+  fetchTeamMembers,
+  type TeamInvitation,
+  type TeamMember,
+} from '../api/teams';
 import { useAuth } from '../auth/useAuth';
 import { MetricTile } from '../layout/AppShell';
 
@@ -37,6 +46,18 @@ type SharedDatasetBundle = {
   insights: DatasetInsightsResponse;
 };
 
+type MembersState =
+  | { status: 'idle'; error: null; members: TeamMember[] }
+  | { status: 'loading'; error: null; members: TeamMember[] }
+  | { status: 'loaded'; error: null; members: TeamMember[] }
+  | { status: 'error'; error: string; members: TeamMember[] };
+
+type InviteState =
+  | { status: 'idle'; error: null; invitation: null }
+  | { status: 'sending'; error: null; invitation: null }
+  | { status: 'sent'; error: null; invitation: TeamInvitation }
+  | { status: 'error'; error: string; invitation: TeamInvitation | null };
+
 type SchemaColumn = {
   index: number;
   name: string;
@@ -47,6 +68,8 @@ type SchemaColumn = {
 };
 
 const initialSharedState: SharedViewState = { status: 'idle', error: null, bundle: null };
+const initialMembersState: MembersState = { status: 'idle', error: null, members: [] };
+const initialInviteState: InviteState = { status: 'idle', error: null, invitation: null };
 
 export function TeamPage() {
   const auth = useAuth();
@@ -55,11 +78,16 @@ export function TeamPage() {
   const [teamId, setTeamId] = useState('');
   const [datasetId, setDatasetId] = useState('');
   const [sharedState, setSharedState] = useState<SharedViewState>(initialSharedState);
+  const [membersState, setMembersState] = useState<MembersState>(initialMembersState);
+  const [inviteState, setInviteState] = useState<InviteState>(initialInviteState);
+  const [inviteEmail, setInviteEmail] = useState('');
+
+  const effectiveTeamId = (teamId || requestedTeamId || '').trim();
 
   const loadSharedDataset = useCallback(
     async (event?: FormEvent<HTMLFormElement>) => {
       event?.preventDefault();
-      const nextTeamId = (teamId || requestedTeamId || '').trim();
+      const nextTeamId = effectiveTeamId;
       const nextDatasetId = datasetId.trim();
 
       if (!nextTeamId || !nextDatasetId) {
@@ -96,12 +124,82 @@ export function TeamPage() {
         });
       }
     },
-    [datasetId, requestedTeamId, sharedState.bundle, teamId],
+    [datasetId, effectiveTeamId, sharedState.bundle],
+  );
+
+  const loadTeamMembers = useCallback(
+    async (event?: FormEvent<HTMLFormElement>) => {
+      event?.preventDefault();
+      const nextTeamId = effectiveTeamId;
+
+      if (!nextTeamId) {
+        setMembersState({
+          status: 'error',
+          error: 'Team identifier is required.',
+          members: membersState.members,
+        });
+        return;
+      }
+
+      const controller = new AbortController();
+      setMembersState({ status: 'loading', error: null, members: membersState.members });
+
+      try {
+        const response = await fetchTeamMembers(nextTeamId, controller.signal);
+        setMembersState({ status: 'loaded', error: null, members: response.members });
+      } catch (cause: unknown) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setMembersState({
+          status: 'error',
+          error: cause instanceof Error ? cause.message : 'Team members fetch failed',
+          members: membersState.members,
+        });
+      }
+    },
+    [effectiveTeamId, membersState.members],
+  );
+
+  const sendInvitation = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const nextTeamId = effectiveTeamId;
+      const email = inviteEmail.trim();
+
+      if (!nextTeamId || !email) {
+        setInviteState({
+          status: 'error',
+          error: 'Team identifier and invite email are required.',
+          invitation: inviteState.invitation,
+        });
+        return;
+      }
+
+      const controller = new AbortController();
+      setInviteState({ status: 'sending', error: null, invitation: null });
+
+      try {
+        const invitation = await createTeamInvitation(nextTeamId, email, controller.signal);
+        setInviteState({ status: 'sent', error: null, invitation });
+        setInviteEmail('');
+      } catch (cause: unknown) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setInviteState({
+          status: 'error',
+          error: cause instanceof Error ? cause.message : 'Team invitation failed',
+          invitation: inviteState.invitation,
+        });
+      }
+    },
+    [effectiveTeamId, inviteEmail, inviteState.invitation],
   );
 
   const bundle = sharedState.bundle;
-  const insights = bundle?.insights.insights ?? [];
   const chartSpecs = bundle?.insights.chart_specs ?? [];
+  const memberCount = membersState.members.length;
 
   return (
     <div className="space-y-8">
@@ -127,8 +225,8 @@ export function TeamPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-3" aria-label="Team workspace metrics">
+        <MetricTile label="Members" value={memberCount.toLocaleString()} icon={Users} />
         <MetricTile label="Shared dataset" value={bundle ? '1' : '0'} icon={Database} />
-        <MetricTile label="Shared findings" value={insights.length.toLocaleString()} icon={Users} />
         <MetricTile
           label="Chart specs"
           value={chartSpecs.length.toLocaleString()}
@@ -148,8 +246,18 @@ export function TeamPage() {
           onSubmit={loadSharedDataset}
         />
 
-        <SharedDatasetOverview bundle={bundle} status={sharedState.status} />
+        <MemberManagementPanel
+          effectiveTeamId={effectiveTeamId}
+          membersState={membersState}
+          inviteEmail={inviteEmail}
+          inviteState={inviteState}
+          onInviteEmailChange={setInviteEmail}
+          onLoadMembers={loadTeamMembers}
+          onInvite={sendInvitation}
+        />
       </section>
+
+      <SharedDatasetOverview bundle={bundle} status={sharedState.status} />
 
       {bundle && (
         <>
@@ -158,6 +266,178 @@ export function TeamPage() {
           <SharedSchemaDetail schema={bundle.schema} />
         </>
       )}
+    </div>
+  );
+}
+
+function MemberManagementPanel({
+  effectiveTeamId,
+  membersState,
+  inviteEmail,
+  inviteState,
+  onInviteEmailChange,
+  onLoadMembers,
+  onInvite,
+}: {
+  effectiveTeamId: string;
+  membersState: MembersState;
+  inviteEmail: string;
+  inviteState: InviteState;
+  onInviteEmailChange: (value: string) => void;
+  onLoadMembers: (event?: FormEvent<HTMLFormElement>) => void;
+  onInvite: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <section className="rounded-md border border-stone-200 bg-white p-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-field" aria-hidden="true" />
+            <p className="text-sm font-semibold uppercase tracking-wide text-harvest">
+              Member management
+            </p>
+          </div>
+          <h3 className="mt-2 text-xl font-semibold text-stone-950">Owners and members</h3>
+          <p className="mt-2 text-sm leading-6 text-stone-600">
+            Invite collaborators and review the current team roster.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onLoadMembers()}
+          disabled={!effectiveTeamId || membersState.status === 'loading'}
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-stone-200 px-3 text-sm font-semibold text-stone-700 hover:bg-stone-100 disabled:cursor-not-allowed disabled:text-stone-400"
+        >
+          {membersState.status === 'loading' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          )}
+          Refresh
+        </button>
+      </div>
+
+      <form onSubmit={onInvite} className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
+        <label className="block">
+          <span className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+            Invite email
+          </span>
+          <input
+            value={inviteEmail}
+            onChange={(event) => onInviteEmailChange(event.currentTarget.value)}
+            className="mt-2 h-10 w-full rounded-md border border-stone-300 bg-white px-3 text-sm text-stone-900"
+            placeholder="member@example.com"
+            type="email"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={!effectiveTeamId || inviteState.status === 'sending'}
+          className="mt-0 inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-field px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600 md:mt-6"
+        >
+          {inviteState.status === 'sending' ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : (
+            <MailPlus className="h-4 w-4" aria-hidden="true" />
+          )}
+          Invite
+        </button>
+      </form>
+
+      {membersState.error && (
+        <StatusCallout tone="warning" message={membersState.error} icon={AlertTriangle} />
+      )}
+
+      {inviteState.error && (
+        <StatusCallout tone="warning" message={inviteState.error} icon={AlertTriangle} />
+      )}
+
+      {inviteState.status === 'sent' && (
+        <StatusCallout
+          tone="success"
+          message={`Invitation queued for ${inviteState.invitation.email}. Delivery status: ${kindLabel(inviteState.invitation.email_delivery.status)}.`}
+          icon={CheckCircle2}
+        />
+      )}
+
+      <div className="mt-5 overflow-hidden rounded-md border border-stone-200">
+        <div className="flex items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-field" aria-hidden="true" />
+            <p className="text-sm font-semibold text-stone-800">Team roster</p>
+          </div>
+          <p className="text-xs text-stone-500">
+            {membersState.members.length.toLocaleString()} shown
+          </p>
+        </div>
+
+        <div className="divide-y divide-stone-100 bg-white">
+          {membersState.members.map((member) => (
+            <MemberRow key={member.user_sub} member={member} />
+          ))}
+
+          {membersState.members.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-stone-500">
+              No members loaded for this team.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MemberRow({ member }: { member: TeamMember }) {
+  const label = member.name || member.email;
+  const initial = label.trim().charAt(0).toUpperCase() || '?';
+
+  return (
+    <article className="flex items-center gap-3 px-4 py-3">
+      {member.picture_url ? (
+        <img
+          src={member.picture_url}
+          alt=""
+          className="h-10 w-10 shrink-0 rounded-md border border-stone-200 object-cover"
+        />
+      ) : (
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-field text-sm font-semibold text-white">
+          {initial}
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-stone-950">{label}</p>
+        <p className="truncate text-xs text-stone-600">{member.email}</p>
+      </div>
+      <div className="text-right">
+        <p className="text-xs font-semibold uppercase tracking-wide text-harvest">
+          {kindLabel(member.role)}
+        </p>
+        <p className="mt-1 text-xs text-stone-500">Seen {formatDate(member.last_seen_at)}</p>
+      </div>
+    </article>
+  );
+}
+
+function StatusCallout({
+  tone,
+  message,
+  icon: Icon,
+}: {
+  tone: 'success' | 'warning';
+  message: string;
+  icon: typeof CheckCircle2;
+}) {
+  const className =
+    tone === 'success'
+      ? 'border-green-200 bg-green-50 text-green-800'
+      : 'border-amber-200 bg-amber-50 text-amber-800';
+
+  return (
+    <div className={`mt-4 flex gap-2 rounded-md border p-3 text-sm ${className}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <p>{message}</p>
     </div>
   );
 }
